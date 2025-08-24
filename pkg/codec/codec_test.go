@@ -12,8 +12,8 @@ import (
 )
 
 func TestCodecRoundTrip(t *testing.T) {
-	serializer := serializer.DefaultSerializer
-	codec := codec.NewLengthPrefixCodec(serializer)
+	s := serializer.DefaultSerializer
+	c := codec.NewLengthPrefixCodec(s)
 
 	// 创建缓冲区
 	buf := &bytes.Buffer{}
@@ -22,11 +22,11 @@ func TestCodecRoundTrip(t *testing.T) {
 	msgType := "test"
 	payload := map[string]string{"key": "value"}
 	requestID := uint64(12345)
-	err := codec.Encode(buf, msgType, payload, requestID)
+	err := c.Encode(buf, msgType, payload, requestID)
 	assert.NoError(t, err)
 
 	// 解码消息
-	decodedMsgType, decodedPayload, decodedRequestID, err := codec.Decode(buf)
+	decodedMsgType, decodedPayload, decodedRequestID, err := c.Decode(buf)
 	assert.NoError(t, err)
 
 	// 验证结果
@@ -35,7 +35,7 @@ func TestCodecRoundTrip(t *testing.T) {
 
 	// 验证负载
 	var decodedData map[string]string
-	err = serializer.Deserialize(decodedPayload, &decodedData)
+	err = s.Deserialize(decodedPayload, &decodedData)
 	assert.NoError(t, err)
 	assert.Equal(t, "value", decodedData["key"])
 }

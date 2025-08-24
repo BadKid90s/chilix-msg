@@ -12,10 +12,10 @@ type Context interface {
 	Connection() transport.Connection // 获取底层连接
 	RawData() []byte                  // 获取原始数据
 	SetRawData(data []byte)           // 设置原始数据
-	Writer() Writer                   // 获取写入器
-	SetWriter(writer Writer)          // 设置写入器
-	Reply(payload interface{}) error  // 发送成功响应
-	Error(errorMsg string) error      // 发送错误响应
+	//Writer() Writer                   // 获取写入器
+	SetWriter(writer Writer)         // 设置写入器
+	Reply(payload interface{}) error // 发送成功响应
+	Error(errorMsg string) error     // 发送错误响应
 }
 
 // processorContext 处理器上下文实现
@@ -58,10 +58,6 @@ func (c *processorContext) RawData() []byte {
 
 func (c *processorContext) SetRawData(data []byte) {
 	c.rawData = data
-}
-
-func (c *processorContext) Writer() Writer {
-	return c.writer
 }
 
 func (c *processorContext) SetWriter(writer Writer) {

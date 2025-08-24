@@ -3,7 +3,6 @@ package codec
 import (
 	"encoding/binary"
 	"io"
-	"log"
 	"strings"
 	"unicode/utf8"
 
@@ -104,7 +103,6 @@ func (c *LengthPrefixCodec) Decode(r io.Reader) (string, []byte, uint64, error) 
 
 	// 解析消息类型长度
 	typeLen := binary.BigEndian.Uint16(baseHeader[4:6])
-	log.Printf("Decoding message: totalLength=%d, typeLen=%d", totalLength, typeLen)
 
 	// 检查消息类型长度
 	if typeLen > MaxTypeLength {
@@ -145,7 +143,6 @@ func (c *LengthPrefixCodec) Decode(r io.Reader) (string, []byte, uint64, error) 
 	if _, err := io.ReadFull(r, payload); err != nil {
 		return "", nil, 0, err
 	}
-	log.Printf("Decoded message: msgType=%s, requestID=%d, payloadLength=%d", msgType, requestID, payloadLength)
 	return msgType, payload, requestID, nil
 }
 

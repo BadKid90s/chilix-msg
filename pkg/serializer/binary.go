@@ -14,7 +14,7 @@ func (b *BinarySerializer) Serialize(msg interface{}) ([]byte, error) {
 		return *dataPtr, nil
 	}
 
-	return nil, ErrInvalidPayloadType
+	return nil, ErrSerializationFailed
 }
 
 func (b *BinarySerializer) Deserialize(data []byte, msg interface{}) error {
@@ -24,5 +24,5 @@ func (b *BinarySerializer) Deserialize(data []byte, msg interface{}) error {
 		return nil
 	}
 
-	return ErrInvalidPayloadType
+	return ErrDeserializationFailed
 }

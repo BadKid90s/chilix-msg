@@ -67,7 +67,6 @@ func (p *Processor) Listen() error {
 		default:
 			// 读取消息
 			msgType, rawData, requestID, err := p.codec.Decode(p.conn)
-			log.Printf("Received message: msgType=%s, requestID=%d, payloadLength=%d", msgType, requestID, len(rawData))
 			if err != nil {
 				return err
 			}
@@ -81,7 +80,6 @@ func (p *Processor) Listen() error {
 			// 如果是响应消息（RequestID > 0 且 pending 中有匹配项）
 			if requestID > 0 {
 				if ch, ok := p.requestMgr.IsPending(requestID); ok {
-					log.Printf("Handling response for requestID=%d", requestID)
 
 					// 完成请求
 					response := &response{
@@ -108,7 +106,6 @@ func (p *Processor) Listen() error {
 
 			// 处理消息
 			go func() {
-				log.Printf("Dispatching message: msgType=%s, requestID=%d", msgType, requestID)
 				if err := p.router.Dispatch(msgType, ctx); err != nil {
 					log.Printf("Error processing message %s: %v", msgType, err)
 				}
