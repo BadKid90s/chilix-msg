@@ -15,10 +15,12 @@ type Context interface {
 	Connection() transport.Connection // 获取底层连接
 	RawData() []byte                  // 获取原始数据
 	SetRawData(data []byte)           // 设置原始数据
+	Writer() Writer                   // 获取消息写入器
 	SetWriter(writer Writer)          // 设置写入器
 	Reply(payload interface{}) error  // 发送成功响应
 	Error(errorMsg string) error      // 发送错误响应
 	Logger() log.Logger               //获取日志
+	Processor() *Processor            //获取处理器
 }
 
 // processorContext 处理器上下文实现
@@ -33,7 +35,7 @@ type processorContext struct {
 }
 
 func (c *processorContext) Bind(target interface{}) error {
-	return c.processor.Opts.Serializer.Deserialize(c.rawData, target)
+	return c.processor.opts.Serializer.Deserialize(c.rawData, target)
 }
 
 func (c *processorContext) MessageType() string {
@@ -63,6 +65,9 @@ func (c *processorContext) RawData() []byte {
 func (c *processorContext) SetRawData(data []byte) {
 	c.rawData = data
 }
+func (c *processorContext) Writer() Writer {
+	return c.writer
+}
 
 func (c *processorContext) SetWriter(writer Writer) {
 	c.writer = writer
@@ -77,4 +82,7 @@ func (c *processorContext) Error(errorMsg string) error {
 }
 func (c *processorContext) Logger() log.Logger {
 	return c.logger
+}
+func (c *processorContext) Processor() *Processor {
+	return c.processor
 }

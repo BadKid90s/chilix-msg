@@ -23,11 +23,12 @@ type Processor struct {
 	conn       transport.Connection
 	codec      codec.Codec
 	router     *Router
-	Opts       ProcessorOptions
+	opts       ProcessorOptions
 	ctx        context.Context
 	cancel     context.CancelFunc
 	requestMgr *RequestManager
 	logger     log.Logger
+	serializer serializer.Serializer
 }
 
 // NewProcessor 创建新的处理器
@@ -47,10 +48,11 @@ func NewProcessor(conn transport.Connection, opts ProcessorOptions) *Processor {
 		conn:       conn,
 		codec:      codec.NewLengthPrefixCodec(opts.Serializer),
 		router:     NewRouter(),
-		Opts:       opts,
+		opts:       opts,
 		ctx:        ctx,
 		cancel:     cancel,
 		requestMgr: NewRequestManager(opts.RequestTimeout),
+		serializer: opts.Serializer,
 		logger:     opts.Logger,
 	}
 }
@@ -81,8 +83,8 @@ func (p *Processor) Listen() error {
 			}
 
 			// 检查消息大小
-			if p.Opts.MessageSizeLimit > 0 && int64(len(rawData)) > p.Opts.MessageSizeLimit {
-				p.logger.Warnf("Message too large: %d > %d", len(rawData), p.Opts.MessageSizeLimit)
+			if p.opts.MessageSizeLimit > 0 && int64(len(rawData)) > p.opts.MessageSizeLimit {
+				p.logger.Warnf("Message too large: %d > %d", len(rawData), p.opts.MessageSizeLimit)
 				continue
 			}
 
@@ -147,7 +149,7 @@ func (p *Processor) Request(msgType string, payload interface{}) (Response, erro
 	select {
 	case response := <-ch:
 		return response, nil
-	case <-time.After(p.Opts.RequestTimeout):
+	case <-time.After(p.opts.RequestTimeout):
 		p.requestMgr.CancelRequest(requestID)
 		return nil, ErrRequestTimeout
 	}
@@ -168,6 +170,9 @@ func (p *Processor) Error(requestID uint64, errorMsg string) error {
 // Logger 返回配置的日志记录器
 func (p *Processor) Logger() log.Logger {
 	return p.logger
+}
+func (p *Processor) Serializer() serializer.Serializer {
+	return p.serializer
 }
 
 // Close 关闭处理器

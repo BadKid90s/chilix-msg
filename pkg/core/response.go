@@ -29,7 +29,7 @@ func (r *response) RequestID() uint64 {
 }
 
 func (r *response) Bind(target interface{}) error {
-	return r.processor.Opts.Serializer.Deserialize(r.rawData, target)
+	return r.processor.opts.Serializer.Deserialize(r.rawData, target)
 }
 
 func (r *response) IsError() bool {
