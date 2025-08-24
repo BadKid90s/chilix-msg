@@ -42,8 +42,9 @@ chilix-msg 是一个高性能、轻量级的消息处理框架，专为分布式
   - 实时消息分发
 
 - 🔒 **端到端加密支持**
-  - AES-GCM 加密算法
-  - 自动 nonce 生成
+  - 对称加密（AES-GCM）
+  - 非对称加密（RSA）
+  - 自动密钥管理
   - 透明的加解密处理
 
 - ⚙️ **可配置的消息处理**
@@ -312,6 +313,93 @@ func LoggingMiddleware() core.Middleware {
 // 注册中间件 
 processor.Use(LoggingMiddleware())
 ```
+
+## 机密通信
+
+chilix-msg 提供了强大的机密通信功能，支持对称加密和非对称加密两种方式，确保数据在网络传输过程中的安全。
+
+### 对称加密 (AES-GCM)
+
+对称加密使用相同的密钥进行加密和解密，具有高性能的特点，适合大量数据的加密传输。
+
+#### 使用示例
+```go
+import ( "github.com/BadKid90s/chilix-msg/pkg/middleware" )
+// 生成或指定加密密钥 
+encryptionKey := middleware.KeyFromString("your-secret-password")
+// 在客户端和服务端都注册加密中间件 
+processor.Use(middleware.EncryptionMiddleware(encryptionKey))
+
+```
+#### 密钥管理
+```go
+// 从字符串生成密钥（推荐方式） 
+key1 := middleware.KeyFromString("my-secret-password")
+// 从Base64编码的字符串生成密钥 
+key2, err := middleware.KeyFromBase64("base64-encoded-key")
+// 直接使用字节密钥（必须是16、24或32字节） 
+key3 := []byte("1234567890123456") // 16字节AES-128密钥
+```
+
+### 非对称加密 (RSA)
+
+非对称加密使用公钥加密、私钥解密，提供了更高的安全性，特别适合密钥分发和身份验证场景。
+
+#### 使用示例
+```go
+import ( "crypto/rsa" "github.com/BadKid90s/chilix-msg/pkg/middleware" )
+// 生成RSA密钥对（通常在服务端完成） 
+privateKey, publicKey, err := middleware.GenerateRSAKeyPair(2048)
+if err != nil { log.Fatal("Failed to generate RSA key pair:", err) }
+// 在服务端注册加密中间件 
+processor.Use(middleware.RSAEncryptionMiddleware(privateKey, publicKey))
+```
+#### 密钥管理
+```go
+// 生成RSA密钥对 
+privateKey, publicKey, err := middleware.GenerateRSAKeyPair(2048) // 支持1024、2048、4096位
+// 导出密钥为PEM格式 
+privateKeyPEM := middleware.ExportRSAPrivateKey(privateKey) 
+publicKeyPEM := middleware.ExportRSAPublicKey(publicKey)
+
+// 从PEM格式导入密钥 
+importedPrivateKey, err := middleware.LoadRSAPrivateKey(privateKeyPEM) 
+importedPublicKey, err := middleware.LoadRSAPublicKey(publicKeyPEM)
+```
+
+### 加密机制说明
+
+#### 对称加密 (AES-GCM)
+
+- 使用 AES-GCM 算法提供认证加密
+- 支持 128、192、256 位密钥长度
+- 自动处理 nonce 生成
+- 提供数据完整性和机密性保护
+
+#### 非对称加密 (RSA)
+
+- 使用 RSA-OAEP 算法进行密钥加密
+- 采用混合加密模式：RSA 加密 AES 密钥，AES 加密实际数据
+- 支持 1024、2048、4096 位密钥长度
+- 提供身份验证和密钥分发能力
+
+### 安全建议
+
+1. **密钥管理**
+   - 对称加密：使用强密码生成密钥，定期更换
+   - 非对称加密：保护好私钥，公钥可以公开分发
+
+2. **密钥分发**
+   - 对称加密：需要安全的密钥分发机制
+   - 非对称加密：可以通过安全渠道分发公钥
+
+3. **性能考虑**
+   - 对称加密：适合大量数据加密
+   - 非对称加密：适合密钥交换和身份验证，性能相对较低
+
+4. **混合使用**
+   - 可以结合使用两种加密方式，发挥各自优势
+
 
 ## 序列化
 chilix-msg 默认使用 JSON 序列化，但您可以轻松替换为其他序列化方式：
