@@ -2,12 +2,12 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/BadKid90s/chilix-msg/pkg/core"
+	"github.com/BadKid90s/chilix-msg/pkg/log"
 	"github.com/BadKid90s/chilix-msg/pkg/serializer"
 	"github.com/BadKid90s/chilix-msg/pkg/transport"
 )
@@ -15,6 +15,8 @@ import (
 const (
 	Port = ":8080"
 )
+
+var logger = log.NewDefaultLogger()
 
 func main() {
 	var wg sync.WaitGroup
@@ -43,16 +45,16 @@ func main() {
 func startServer() {
 	listener, err := net.Listen("tcp", Port)
 	if err != nil {
-		log.Fatalf("Echo server start failed: %v", err)
+		logger.Errorf("Echo server start failed: %v", err)
 	}
 	defer listener.Close()
 
-	log.Printf("✅ Echo server started on %s", listener.Addr())
+	logger.Infof("✅ Echo server started on %s", listener.Addr())
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Printf("Accept connection failed: %v", err)
+			logger.Errorf("Accept connection failed: %v", err)
 			continue
 		}
 
@@ -63,7 +65,7 @@ func startServer() {
 func startClient() {
 	conn, err := net.Dial("tcp", "localhost"+Port)
 	if err != nil {
-		log.Fatalf("Connect failed: %v", err)
+		logger.Fatalf("Connect failed: %v", err)
 	}
 	defer conn.Close()
 
@@ -86,7 +88,7 @@ func handleEchoServerConnection(conn transport.Connection) {
 			return ctx.Error("Invalid message format")
 		}
 
-		log.Printf("Received echo request: %s", msg)
+		logger.Infof("Received echo request: %s", msg)
 
 		// 使用相同的消息类型回复
 		return ctx.Reply(msg)
@@ -94,7 +96,7 @@ func handleEchoServerConnection(conn transport.Connection) {
 
 	// 启动监听
 	if err := processor.Listen(); err != nil {
-		log.Printf("Connection error: %v", err)
+		logger.Errorf("Connection error: %v", err)
 	}
 }
 
@@ -109,7 +111,7 @@ func handleEchoClientConnection(conn transport.Connection) {
 	// 启动监听
 	go func() {
 		if err := processor.Listen(); err != nil {
-			log.Printf("Client listen error: %v", err)
+			logger.Errorf("Client listen error: %v", err)
 		}
 	}()
 
@@ -118,25 +120,25 @@ func handleEchoClientConnection(conn transport.Connection) {
 		msg := fmt.Sprintf("Echo-%d", i)
 		response, err := processor.Request("echo", msg)
 		if err != nil {
-			log.Printf("Echo request failed: %v", err)
+			logger.Errorf("Echo request failed: %v", err)
 			continue
 		}
 
 		// 检查错误响应
 		if response.IsError() {
-			log.Printf("Error response: %s", response.Error())
+			logger.Errorf("Error response: %s", response.Error())
 			continue
 		}
 
 		var echoResponse string
 		err = response.Bind(&echoResponse)
 		if err != nil {
-			log.Printf("Failed to parse echo response: %v", err)
+			logger.Errorf("Failed to parse echo response: %v", err)
 			continue
 		}
-		log.Printf("Echo response: %s", echoResponse)
+		logger.Infof("Echo response: %s", echoResponse)
 		time.Sleep(500 * time.Millisecond)
 	}
 
-	log.Println("✅ Sent and received 10 echo messages")
+	logger.Infof("✅ Sent and received 10 echo messages")
 }

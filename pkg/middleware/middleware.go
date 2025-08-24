@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"log"
 	"time"
 
 	"github.com/BadKid90s/chilix-msg/pkg/core"
@@ -15,7 +14,7 @@ func LoggingMiddleware() core.Middleware {
 			err := next(ctx)
 			duration := time.Since(start)
 
-			log.Printf("Processed message %s in %v", ctx.MessageType(), duration)
+			ctx.Logger().Infof("Processed message %s in %v", ctx.MessageType(), duration)
 			return err
 		}
 	}
@@ -28,7 +27,7 @@ func RecoveryMiddleware() core.Middleware {
 			defer func() {
 				if r := recover(); r != nil {
 					err = core.ErrHandlerPanic
-					log.Printf("Recovered from panic in handler for %s: %v", ctx.MessageType(), r)
+					ctx.Logger().Errorf("Recovered from panic in handler for %s: %v", ctx.MessageType(), r)
 				}
 			}()
 			return next(ctx)

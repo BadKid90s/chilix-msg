@@ -1,6 +1,9 @@
 package core
 
-import "github.com/BadKid90s/chilix-msg/pkg/transport"
+import (
+	"github.com/BadKid90s/chilix-msg/pkg/log"
+	"github.com/BadKid90s/chilix-msg/pkg/transport"
+)
 
 // Context 处理器上下文接口
 type Context interface {
@@ -12,10 +15,10 @@ type Context interface {
 	Connection() transport.Connection // 获取底层连接
 	RawData() []byte                  // 获取原始数据
 	SetRawData(data []byte)           // 设置原始数据
-	//Writer() Writer                   // 获取写入器
-	SetWriter(writer Writer)         // 设置写入器
-	Reply(payload interface{}) error // 发送成功响应
-	Error(errorMsg string) error     // 发送错误响应
+	SetWriter(writer Writer)          // 设置写入器
+	Reply(payload interface{}) error  // 发送成功响应
+	Error(errorMsg string) error      // 发送错误响应
+	Logger() log.Logger               //获取日志
 }
 
 // processorContext 处理器上下文实现
@@ -26,6 +29,7 @@ type processorContext struct {
 	rawData    []byte
 	processor  *Processor
 	writer     Writer
+	logger     log.Logger
 }
 
 func (c *processorContext) Bind(target interface{}) error {
@@ -70,4 +74,7 @@ func (c *processorContext) Reply(payload interface{}) error {
 
 func (c *processorContext) Error(errorMsg string) error {
 	return c.writer.Error(errorMsg)
+}
+func (c *processorContext) Logger() log.Logger {
+	return c.logger
 }
