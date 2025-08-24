@@ -23,7 +23,7 @@ type Processor struct {
 	conn       transport.Connection
 	codec      codec.Codec
 	router     *Router
-	opts       ProcessorOptions
+	Opts       ProcessorOptions
 	ctx        context.Context
 	cancel     context.CancelFunc
 	requestMgr *RequestManager
@@ -47,7 +47,7 @@ func NewProcessor(conn transport.Connection, opts ProcessorOptions) *Processor {
 		conn:       conn,
 		codec:      codec.NewLengthPrefixCodec(opts.Serializer),
 		router:     NewRouter(),
-		opts:       opts,
+		Opts:       opts,
 		ctx:        ctx,
 		cancel:     cancel,
 		requestMgr: NewRequestManager(opts.RequestTimeout),
@@ -81,8 +81,8 @@ func (p *Processor) Listen() error {
 			}
 
 			// 检查消息大小
-			if p.opts.MessageSizeLimit > 0 && int64(len(rawData)) > p.opts.MessageSizeLimit {
-				p.logger.Warnf("Message too large: %d > %d", len(rawData), p.opts.MessageSizeLimit)
+			if p.Opts.MessageSizeLimit > 0 && int64(len(rawData)) > p.Opts.MessageSizeLimit {
+				p.logger.Warnf("Message too large: %d > %d", len(rawData), p.Opts.MessageSizeLimit)
 				continue
 			}
 
@@ -147,7 +147,7 @@ func (p *Processor) Request(msgType string, payload interface{}) (Response, erro
 	select {
 	case response := <-ch:
 		return response, nil
-	case <-time.After(p.opts.RequestTimeout):
+	case <-time.After(p.Opts.RequestTimeout):
 		p.requestMgr.CancelRequest(requestID)
 		return nil, ErrRequestTimeout
 	}

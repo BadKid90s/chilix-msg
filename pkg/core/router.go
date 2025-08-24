@@ -56,3 +56,27 @@ func (r *Router) Dispatch(msgType string, ctx Context) error {
 
 	return h(ctx)
 }
+
+// Handlers 返回注册的处理器映射（用于测试）
+func (r *Router) Handlers() map[string]Handler {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	// 返回handlers的副本
+	handlers := make(map[string]Handler)
+	for k, v := range r.handlers {
+		handlers[k] = v
+	}
+	return handlers
+}
+
+// Middlewares 返回注册的中间件切片（用于测试）
+func (r *Router) Middlewares() []Middleware {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
+	// 返回middlewares的副本
+	middlewares := make([]Middleware, len(r.middlewares))
+	copy(middlewares, r.middlewares)
+	return middlewares
+}

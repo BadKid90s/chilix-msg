@@ -33,7 +33,7 @@ type processorContext struct {
 }
 
 func (c *processorContext) Bind(target interface{}) error {
-	return c.processor.opts.Serializer.Deserialize(c.rawData, target)
+	return c.processor.Opts.Serializer.Deserialize(c.rawData, target)
 }
 
 func (c *processorContext) MessageType() string {

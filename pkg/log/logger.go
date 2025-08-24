@@ -46,6 +46,12 @@ func (l *DefaultLogger) Warnf(format string, v ...interface{}) {
 	l.logger.Printf("[WARN] "+format, v...)
 }
 
+// Fatalf 记录致命错误日志
 func (l *DefaultLogger) Fatalf(format string, v ...interface{}) {
 	l.logger.Fatalf("[FATAL] "+format, v...)
+}
+
+// GetLogger 获取底层的logger实例
+func (l *DefaultLogger) GetLogger() *log.Logger {
+	return l.logger
 }
