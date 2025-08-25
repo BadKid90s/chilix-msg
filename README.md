@@ -99,7 +99,13 @@ func main() {
 		go handleConnection(conn)
 	}
 }
-func handleConnection(conn net.Conn) { // 创建处理器 processor := core.NewProcessor(conn, core.ProcessorOptions{ Serializer: serializer.DefaultSerializer, MessageSizeLimit: 1024 * 1024, // 1MB RequestTimeout: 10 * time.Second, })
+func handleConnection(conn net.Conn) {
+	// 创建处理器
+	processor := core.NewProcessor(conn, core.ProcessorOptions{
+		Serializer: serializer.DefaultSerializer,
+		MessageSizeLimit: 1024 * 1024, // 1MB
+		RequestTimeout: 10 * time.Second,
+	})
     defer conn.Close()
 	// 创建处理器
 	processor := core.NewProcessor(conn, core.ProcessorOptions{
@@ -287,7 +293,11 @@ err := processor.Send("notification", map[string]interface{}{
 ```
 客户端注册相应的处理器来接收推送消息：
 ```go
-processor.RegisterHandler("notification", func(ctx core.Context) error { var notification map[string]interface{} if err := ctx.Bind(&notification); err != nil { return err }
+processor.RegisterHandler("notification", func(ctx core.Context) error {
+	var notification map[string]interface{}
+	if err := ctx.Bind(&notification); err != nil {
+		return err
+	}
     log.Printf("Received notification: %v", notification)
     return nil
 })
