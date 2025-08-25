@@ -254,11 +254,11 @@ rocessor.RegisterHandler("message_type", func (ctx core.Context) error {
 	if err := ctx.Bind(&payload); err != nil { 
 		return err
 	}
-// 处理消息
-// ...
-
-// 可选地回复消息
-return ctx.Reply(responseData)
+	// 处理消息
+	// ...
+	
+	// 可选地回复消息
+	return ctx.Reply(responseData)
 })
 
 ```
