@@ -13,7 +13,7 @@ type Connection interface {
 type Listener interface {
 	Accept() (Connection, error)
 	Close() error
-	Addr() string
+	Addr() net.Addr
 }
 
 // Transport 传输层接口
