@@ -20,4 +20,5 @@ type Listener interface {
 type Transport interface {
 	Listen(address string) (Listener, error)
 	Dial(address string) (Connection, error)
+	Protocol() string
 }
