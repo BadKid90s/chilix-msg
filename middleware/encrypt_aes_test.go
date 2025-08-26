@@ -48,15 +48,15 @@ func (m *MockConnection) RemoteAddr() net.Addr {
 
 }
 
-func (m *MockConnection) SetDeadline(t time.Time) error {
+func (m *MockConnection) SetDeadline(time.Time) error {
 	return nil
 }
 
-func (m *MockConnection) SetReadDeadline(t time.Time) error {
+func (m *MockConnection) SetReadDeadline(time.Time) error {
 	return nil
 }
 
-func (m *MockConnection) SetWriteDeadline(t time.Time) error {
+func (m *MockConnection) SetWriteDeadline(time.Time) error {
 	return nil
 }
 
@@ -73,7 +73,7 @@ func (m *MockWriter) Write(msgType string, payload interface{}) error {
 	return nil
 }
 
-func (m *MockWriter) Reply(requestID uint64, msgType string, payload interface{}) error {
+func (m *MockWriter) Reply(_ uint64, msgType string, payload interface{}) error {
 	m.lastMsgType = msgType
 	m.lastPayload = payload
 	return nil
