@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/BadKid90s/chilix-msg/pkg/codec"
-	"github.com/BadKid90s/chilix-msg/pkg/log"
-	"github.com/BadKid90s/chilix-msg/pkg/serializer"
-	"github.com/BadKid90s/chilix-msg/pkg/transport"
+	"github.com/BadKid90s/chilix-msg/codec"
+	"github.com/BadKid90s/chilix-msg/log"
+	"github.com/BadKid90s/chilix-msg/serializer"
+	"github.com/BadKid90s/chilix-msg/transport"
 )
 
 // ProcessorOptions 处理器配置选项

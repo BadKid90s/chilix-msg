@@ -9,8 +9,8 @@ import (
 	"errors"
 	"io"
 
-	"github.com/BadKid90s/chilix-msg/pkg/core"
-	"github.com/BadKid90s/chilix-msg/pkg/log"
+	"github.com/BadKid90s/chilix-msg/core"
+	"github.com/BadKid90s/chilix-msg/log"
 )
 
 // EncryptionMiddleware 加密中间件

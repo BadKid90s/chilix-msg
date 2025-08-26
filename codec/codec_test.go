@@ -6,8 +6,8 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/BadKid90s/chilix-msg/pkg/codec"
-	"github.com/BadKid90s/chilix-msg/pkg/serializer"
+	"github.com/BadKid90s/chilix-msg/codec"
+	"github.com/BadKid90s/chilix-msg/serializer"
 	"github.com/stretchr/testify/assert"
 )
 

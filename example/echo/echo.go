@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BadKid90s/chilix-msg/pkg/core"
-	"github.com/BadKid90s/chilix-msg/pkg/log"
-	"github.com/BadKid90s/chilix-msg/pkg/serializer"
-	"github.com/BadKid90s/chilix-msg/pkg/transport"
+	"github.com/BadKid90s/chilix-msg/core"
+	"github.com/BadKid90s/chilix-msg/log"
+	"github.com/BadKid90s/chilix-msg/serializer"
+	"github.com/BadKid90s/chilix-msg/transport"
 )
 
 const (

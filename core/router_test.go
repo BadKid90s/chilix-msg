@@ -3,8 +3,8 @@ package core
 import (
 	"testing"
 
-	"github.com/BadKid90s/chilix-msg/pkg/log"
-	"github.com/BadKid90s/chilix-msg/pkg/transport"
+	"github.com/BadKid90s/chilix-msg/log"
+	"github.com/BadKid90s/chilix-msg/transport"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -48,7 +48,7 @@ func (m *MockContext) RawData() []byte {
 func (m *MockContext) SetRawData([]byte) {
 }
 
-func (m *MockContext) Writer() interface{} {
+func (m *MockContext) Writer() Writer {
 	return nil
 }
 

@@ -8,8 +8,8 @@ import (
 	"encoding/pem"
 	"errors"
 
-	"github.com/BadKid90s/chilix-msg/pkg/core"
-	"github.com/BadKid90s/chilix-msg/pkg/log"
+	"github.com/BadKid90s/chilix-msg/core"
+	"github.com/BadKid90s/chilix-msg/log"
 )
 
 // RSAEncryptionMiddleware 非对称加密中间件

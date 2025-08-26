@@ -3,7 +3,7 @@ package middleware
 import (
 	"time"
 
-	"github.com/BadKid90s/chilix-msg/pkg/core"
+	"github.com/BadKid90s/chilix-msg/core"
 )
 
 // LoggingMiddleware 日志中间件

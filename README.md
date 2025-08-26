@@ -1,6 +1,6 @@
 # chilix-msg
 
-chilix-msg 是一个高性能、轻量级的消息处理框架，专为分布式系统和微服务架构设计。它提供了简洁的API来处理消息通信，支持中间件、请求-响应模式，并且可以轻松扩展。
+chilix-msg 是一个高性能、轻量级的消息处理框架，专为网络Socket编程设计。它提供了简洁的API来处理消息通信，支持中间件、请求-响应模式，并且可以轻松扩展。
 
 ## 特性
 
@@ -78,7 +78,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/BadKid90s/chilix-msg/pkg/core"
+	"github.com/BadKid90s/chilix-msg/core"
 )
 
 func main() {
@@ -138,8 +138,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/BadKid90s/chilix-msg/pkg/core"
-	"github.com/BadKid90s/chilix-msg/pkg/serializer"
+	"github.com/BadKid90s/chilix-msg/core"
+	"github.com/BadKid90s/chilix-msg/serializer"
 )
 
 func main() {
@@ -333,7 +333,7 @@ chilix-msg 提供了强大的机密通信功能，支持对称加密和非对称
 
 #### 使用示例
 ```go
-import ( "github.com/BadKid90s/chilix-msg/pkg/middleware" )
+import ( "github.com/BadKid90s/chilix-msg/middleware" )
 // 生成或指定加密密钥 
 encryptionKey := middleware.KeyFromString("your-secret-password")
 // 在客户端和服务端都注册加密中间件 
@@ -356,7 +356,7 @@ key3 := []byte("1234567890123456") // 16字节AES-128密钥
 
 #### 使用示例
 ```go
-import ( "crypto/rsa" "github.com/BadKid90s/chilix-msg/pkg/middleware" )
+import ( "crypto/rsa" "github.com/BadKid90s/chilix-msg/middleware" )
 // 生成RSA密钥对（通常在服务端完成） 
 privateKey, publicKey, err := middleware.GenerateRSAKeyPair(2048)
 if err != nil { log.Fatal("Failed to generate RSA key pair:", err) }
@@ -425,13 +425,13 @@ processor := core.NewProcessor(conn, core.ProcessorOptions{
 ### core.Processor
 
 - `NewProcessor(conn transport.Connection, opts ProcessorOptions) *Processor` - 创建新的处理器
-- [Use(middleware Middleware)](file:///Users/wry/IdeaProjects/chilix-msg/pkg/core/processor.go#L50-L52) - 注册中间件
+- [Use(middleware Middleware)](file:///Users/wry/IdeaProjects/chilix-msg/core/processor.go#L50-L52) - 注册中间件
 - `RegisterHandler(msgType string, handler Handler)` - 注册消息处理器
-- [Listen() error](file:///Users/wry/IdeaProjects/chilix-msg/pkg/core/processor.go#L61-L114) - 开始监听和处理消息
+- [Listen() error](file:///Users/wry/IdeaProjects/chilix-msg/core/processor.go#L61-L114) - 开始监听和处理消息
 - `Send(msgType string, payload interface{}) error` - 发送消息
 - `Request(msgType string, payload interface{}) (Response, error)` - 发送请求并等待响应
 - `Reply(requestID uint64, msgType string, payload interface{}) error` - 发送响应
-- [Close() error](file:///Users/wry/IdeaProjects/chilix-msg/pkg/core/processor.go#L158-L161) - 关闭处理器
+- [Close() error](file:///Users/wry/IdeaProjects/chilix-msg/core/processor.go#L158-L161) - 关闭处理器
 
 ## 贡献
 

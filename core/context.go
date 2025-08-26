@@ -1,8 +1,8 @@
 package core
 
 import (
-	"github.com/BadKid90s/chilix-msg/pkg/log"
-	"github.com/BadKid90s/chilix-msg/pkg/transport"
+	"github.com/BadKid90s/chilix-msg/log"
+	"github.com/BadKid90s/chilix-msg/transport"
 )
 
 // Context 处理器上下文接口

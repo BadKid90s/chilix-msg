@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BadKid90s/chilix-msg/pkg/core"
-	"github.com/BadKid90s/chilix-msg/pkg/serializer"
+	"github.com/BadKid90s/chilix-msg/core"
+	"github.com/BadKid90s/chilix-msg/serializer"
 )
 
 const (

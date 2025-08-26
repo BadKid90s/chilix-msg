@@ -1,4 +1,4 @@
-package core_test
+package core
 
 import (
 	"bytes"
@@ -6,9 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/BadKid90s/chilix-msg/pkg/core"
-	"github.com/BadKid90s/chilix-msg/pkg/log"
-	"github.com/BadKid90s/chilix-msg/pkg/serializer"
+	"github.com/BadKid90s/chilix-msg/log"
+	"github.com/BadKid90s/chilix-msg/serializer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -69,23 +68,23 @@ func TestNewProcessor(t *testing.T) {
 	logger := log.NewDefaultLogger()
 
 	// 测试使用默认序列化器
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := NewProcessor(conn, ProcessorOptions{
 		Logger: logger,
 	})
 	assert.NotNil(t, processor)
-	assert.Equal(t, serializer.DefaultSerializer, processor.Opts.Serializer)
+	assert.Equal(t, serializer.DefaultSerializer, processor.opts.Serializer)
 
 	// 测试使用自定义序列化器
 	customSerializer := &serializer.JSON{}
-	processor = core.NewProcessor(conn, core.ProcessorOptions{
+	processor = NewProcessor(conn, ProcessorOptions{
 		Serializer: customSerializer,
 		Logger:     logger,
 	})
 	assert.NotNil(t, processor)
-	assert.Equal(t, customSerializer, processor.Opts.Serializer)
+	assert.Equal(t, customSerializer, processor.opts.Serializer)
 
 	// 测试未提供Logger时使用默认Logger
-	processor = core.NewProcessor(conn, core.ProcessorOptions{})
+	processor = NewProcessor(conn, ProcessorOptions{})
 	assert.NotNil(t, processor)
 	assert.NotNil(t, processor.Logger())
 }
@@ -93,13 +92,13 @@ func TestNewProcessor(t *testing.T) {
 // 测试注册中间件
 func TestProcessor_Use(t *testing.T) {
 	conn := &MockConnection{}
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := NewProcessor(conn, ProcessorOptions{
 		Logger: log.NewDefaultLogger(),
 	})
 
 	// 注册一个简单的中间件
-	middleware := func(next core.Handler) core.Handler {
-		return func(ctx core.Context) error {
+	middleware := func(next Handler) Handler {
+		return func(ctx Context) error {
 			return next(ctx)
 		}
 	}
@@ -111,12 +110,12 @@ func TestProcessor_Use(t *testing.T) {
 // 测试注册处理器
 func TestProcessor_RegisterHandler(t *testing.T) {
 	conn := &MockConnection{}
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := NewProcessor(conn, ProcessorOptions{
 		Logger: log.NewDefaultLogger(),
 	})
 
 	// 注册一个处理器
-	handler := func(ctx core.Context) error {
+	handler := func(ctx Context) error {
 		return nil
 	}
 
@@ -128,7 +127,7 @@ func TestProcessor_RegisterHandler(t *testing.T) {
 func TestProcessor_Send(t *testing.T) {
 	buf := &bytes.Buffer{}
 	conn := &MockConnection{buf: buf}
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := NewProcessor(conn, ProcessorOptions{
 		Logger: log.NewDefaultLogger(),
 	})
 
@@ -145,7 +144,7 @@ func TestProcessor_Send(t *testing.T) {
 func TestProcessor_Reply(t *testing.T) {
 	buf := &bytes.Buffer{}
 	conn := &MockConnection{buf: buf}
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := NewProcessor(conn, ProcessorOptions{
 		Logger: log.NewDefaultLogger(),
 	})
 
@@ -163,7 +162,7 @@ func TestProcessor_Reply(t *testing.T) {
 func TestProcessor_Error(t *testing.T) {
 	buf := &bytes.Buffer{}
 	conn := &MockConnection{buf: buf}
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := NewProcessor(conn, ProcessorOptions{
 		Logger: log.NewDefaultLogger(),
 	})
 
@@ -180,7 +179,7 @@ func TestProcessor_Error(t *testing.T) {
 func TestProcessor_Close(t *testing.T) {
 	conn := &MockConnection{}
 	conn.On("Close").Return(nil)
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := NewProcessor(conn, ProcessorOptions{
 		Logger: log.NewDefaultLogger(),
 	})
 
@@ -193,7 +192,7 @@ func TestProcessor_Close(t *testing.T) {
 func TestProcessor_Logger(t *testing.T) {
 	conn := &MockConnection{}
 	logger := log.NewDefaultLogger()
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := NewProcessor(conn, ProcessorOptions{
 		Logger: logger,
 	})
 

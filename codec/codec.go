@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/BadKid90s/chilix-msg/pkg/serializer"
+	"github.com/BadKid90s/chilix-msg/serializer"
 )
 
 // 头部结构：
