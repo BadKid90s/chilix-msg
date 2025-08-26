@@ -116,7 +116,7 @@ func (p *Processor) Listen() error {
 				connection: p.conn,
 				rawData:    rawData,
 				processor:  p,
-				writer:     NewMessageWriterWithRequest(p, requestID),
+				writer:     NewMessageWriter(p),
 				logger:     p.logger,
 			}
 
@@ -164,12 +164,6 @@ func (p *Processor) Request(msgType string, payload interface{}) (Response, erro
 func (p *Processor) Reply(requestID uint64, msgType string, payload interface{}) error {
 	p.logger.Debugf("Sending reply: requestID=%d, msgType=%s", requestID, msgType)
 	return p.codec.Encode(p.conn, msgType, payload, requestID)
-}
-
-// Error 发送错误响应
-func (p *Processor) Error(requestID uint64, errorMsg string) error {
-	p.logger.Debugf("Sending error: requestID=%d, error=%s", requestID, errorMsg)
-	return p.codec.Encode(p.conn, "error", map[string]string{"error": errorMsg}, requestID)
 }
 
 // Logger 返回配置的日志记录器

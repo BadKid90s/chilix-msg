@@ -7,8 +7,6 @@ type Response interface {
 	MsgType() string
 	RequestID() uint64
 	Bind(target interface{}) error
-	IsError() bool
-	Error() string
 	RawData() []byte
 }
 
@@ -30,22 +28,6 @@ func (r *response) RequestID() uint64 {
 
 func (r *response) Bind(target interface{}) error {
 	return r.processor.opts.Serializer.Deserialize(r.rawData, target)
-}
-
-func (r *response) IsError() bool {
-	return r.msgType == "error"
-}
-
-func (r *response) Error() string {
-	if r.IsError() {
-		var errorResponse struct {
-			Error string `json:"error"`
-		}
-		if err := r.Bind(&errorResponse); err == nil {
-			return errorResponse.Error
-		}
-	}
-	return ""
 }
 
 func (r *response) RawData() []byte {

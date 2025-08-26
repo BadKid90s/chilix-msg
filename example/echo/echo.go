@@ -85,7 +85,7 @@ func handleEchoServerConnection(conn transport.Connection) {
 	processor.RegisterHandler("echo", func(ctx core.Context) error {
 		var msg string
 		if err := ctx.Bind(&msg); err != nil {
-			return ctx.Error("Invalid message format")
+			return ctx.Reply(map[string]string{"error": "Invalid message format"})
 		}
 
 		logger.Infof("Received echo request: %s", msg)
@@ -125,8 +125,13 @@ func handleEchoClientConnection(conn transport.Connection) {
 		}
 
 		// 检查错误响应
-		if response.IsError() {
-			logger.Errorf("Error response: %s", response.Error())
+		if response.MsgType() == "error" {
+			var errorData map[string]string
+			if err := response.Bind(&errorData); err == nil {
+				logger.Errorf("Error response: %s", errorData["error"])
+			} else {
+				logger.Errorf("Error response: failed to parse error")
+			}
 			continue
 		}
 

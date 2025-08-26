@@ -18,7 +18,6 @@ type Context interface {
 	Writer() Writer                   // 获取消息写入器
 	SetWriter(writer Writer)          // 设置写入器
 	Reply(payload interface{}) error  // 发送成功响应
-	Error(errorMsg string) error      // 发送错误响应
 	Logger() log.Logger               //获取日志
 	Processor() *Processor            //获取处理器
 }
@@ -75,10 +74,6 @@ func (c *processorContext) SetWriter(writer Writer) {
 
 func (c *processorContext) Reply(payload interface{}) error {
 	return c.writer.Reply(c.requestID, c.msgType, payload)
-}
-
-func (c *processorContext) Error(errorMsg string) error {
-	return c.writer.Error(errorMsg)
 }
 func (c *processorContext) Logger() log.Logger {
 	return c.logger

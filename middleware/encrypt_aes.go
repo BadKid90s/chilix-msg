@@ -27,7 +27,8 @@ func EncryptionMiddleware(key []byte) core.Middleware {
 			decryptedData, err := decrypt(key, ctx.RawData())
 			if err != nil {
 				ctx.Logger().Errorf("Decryption failed: %v", err)
-				return ctx.Error("decryption failed")
+				// 解密失败是框架层错误，直接返回error而不是业务响应
+				return err
 			}
 
 			// 更新上下文中的原始数据

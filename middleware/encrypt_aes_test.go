@@ -298,10 +298,6 @@ func (c *MockContext) SetWriter(writer core.Writer) {
 	c.writer = writer
 }
 
-func (c *MockContext) Error(errorMsg string) error {
-	return c.writer.Error(errorMsg)
-}
-
 func (c *MockContext) Processor() *core.Processor {
 	return c.processor
 }
