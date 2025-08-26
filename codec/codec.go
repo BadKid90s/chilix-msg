@@ -9,16 +9,27 @@ import (
 	"github.com/BadKid90s/chilix-msg/serializer"
 )
 
-// 头部结构：
-// [0:4] 总长度 (uint32, big-endian)
-// [4:6] 消息类型长度 (uint16, big-endian)
-// [6:6+N] 消息类型 (UTF-8字符串)
-// [6+N:14+N] 请求ID (uint64, big-endian)
-// [14+N:] 负载数据
+// 优化后的头部结构：
+// [0:1] 版本 (uint8)
+// [1:2] 标志 (uint8) - 压缩、加密等特性
+// [2:6] 总长度 (uint32, big-endian)
+// [6:14] 请求ID (uint64, big-endian, 8字节对齐)
+// [14:15] 消息类型长度 (uint8)
+// [15:15+N] 消息类型 (UTF-8字符串)
+// [15+N:] 负载数据
 
 const (
-	HeaderBaseSize = 14  // 基础头部大小（不含消息类型）
-	MaxTypeLength  = 255 // 最大消息类型长度
+	ProtocolVersion = 1      // 协议版本
+	HeaderBaseSize  = 15     // 基础头部大小（不含消息类型）
+	MaxTypeLength   = 255    // 最大消息类型长度
+)
+
+// 标志位定义
+const (
+	FlagNone       = 0x00 // 无特殊标志
+	FlagCompressed = 0x01 // 压缩标志
+	FlagEncrypted  = 0x02 // 加密标志
+	// 预留其他标志位...
 )
 
 // Codec 编解码器接口
@@ -39,6 +50,10 @@ func NewLengthPrefixCodec(serializer serializer.Serializer) *LengthPrefixCodec {
 }
 
 func (c *LengthPrefixCodec) Encode(w io.Writer, msgType string, payload interface{}, requestID uint64) error {
+	return c.EncodeWithFlags(w, msgType, payload, requestID, FlagNone)
+}
+
+func (c *LengthPrefixCodec) EncodeWithFlags(w io.Writer, msgType string, payload interface{}, requestID uint64, flags uint8) error {
 	// 验证消息类型
 	if !isValidMessageType(msgType) {
 		return ErrInvalidMessageType
@@ -65,17 +80,23 @@ func (c *LengthPrefixCodec) Encode(w io.Writer, msgType string, payload interfac
 	// 创建头部缓冲区
 	header := make([]byte, HeaderBaseSize+typeLen)
 
+	// 写入版本
+	header[0] = ProtocolVersion
+
+	// 写入标志
+	header[1] = flags
+
 	// 写入总长度
-	binary.BigEndian.PutUint32(header[0:4], totalLength)
+	binary.BigEndian.PutUint32(header[2:6], totalLength)
+
+	// 写入请求ID（固定位置，8字节对齐）
+	binary.BigEndian.PutUint64(header[6:14], requestID)
 
 	// 写入消息类型长度
-	binary.BigEndian.PutUint16(header[4:6], uint16(typeLen))
+	header[14] = uint8(typeLen)
 
 	// 写入消息类型
-	copy(header[6:6+typeLen], typeBytes)
-
-	// 写入请求ID
-	binary.BigEndian.PutUint64(header[6+typeLen:6+typeLen+8], requestID)
+	copy(header[15:15+typeLen], typeBytes)
 
 	// 写入头部
 	if _, err := w.Write(header); err != nil {
@@ -91,59 +112,68 @@ func (c *LengthPrefixCodec) Encode(w io.Writer, msgType string, payload interfac
 }
 
 func (c *LengthPrefixCodec) Decode(r io.Reader) (string, []byte, uint64, error) {
+	msgType, payload, requestID, _, err := c.DecodeWithFlags(r)
+	return msgType, payload, requestID, err
+}
 
-	// 读取基础头部
-	baseHeader := make([]byte, 6)
-	if _, err := io.ReadFull(r, baseHeader); err != nil {
-		return "", nil, 0, err
+func (c *LengthPrefixCodec) DecodeWithFlags(r io.Reader) (string, []byte, uint64, uint8, error) {
+	// 读取固定头部
+	fixedHeader := make([]byte, 15)
+	if _, err := io.ReadFull(r, fixedHeader); err != nil {
+		return "", nil, 0, 0, err
 	}
 
+	// 检查版本
+	version := fixedHeader[0]
+	if version != ProtocolVersion {
+		return "", nil, 0, 0, ErrUnsupportedVersion
+	}
+
+	// 解析标志
+	flags := fixedHeader[1]
+
 	// 解析总长度
-	totalLength := binary.BigEndian.Uint32(baseHeader[0:4])
+	totalLength := binary.BigEndian.Uint32(fixedHeader[2:6])
+
+	// 解析请求ID
+	requestID := binary.BigEndian.Uint64(fixedHeader[6:14])
 
 	// 解析消息类型长度
-	typeLen := binary.BigEndian.Uint16(baseHeader[4:6])
+	typeLen := fixedHeader[14]
 
 	// 检查消息类型长度
 	if typeLen > MaxTypeLength {
-		return "", nil, 0, ErrMessageTypeTooLong
+		return "", nil, 0, 0, ErrMessageTypeTooLong
 	}
 
-	// 创建完整头部缓冲区
-	fullHeaderSize := 6 + int(typeLen) + 8
-	fullHeader := make([]byte, fullHeaderSize)
-
-	// 复制基础头部
-	copy(fullHeader[0:6], baseHeader)
-
-	// 读取剩余头部
-	if _, err := io.ReadFull(r, fullHeader[6:fullHeaderSize]); err != nil {
-		return "", nil, 0, err
+	// 读取消息类型
+	msgTypeBytes := make([]byte, typeLen)
+	if _, err := io.ReadFull(r, msgTypeBytes); err != nil {
+		return "", nil, 0, 0, err
 	}
 
 	// 解析消息类型
-	msgType := string(fullHeader[6 : 6+typeLen])
+	msgType := string(msgTypeBytes)
 
 	// 验证消息类型
 	if !isValidMessageType(msgType) {
-		return "", nil, 0, ErrInvalidMessageType
+		return "", nil, 0, 0, ErrInvalidMessageType
 	}
 
-	// 解析请求ID
-	requestID := binary.BigEndian.Uint64(fullHeader[6+typeLen : 6+typeLen+8])
-
 	// 计算负载长度
-	payloadLength := int(totalLength) - fullHeaderSize
+	headerSize := HeaderBaseSize + int(typeLen)
+	payloadLength := int(totalLength) - headerSize
 	if payloadLength < 0 {
-		return "", nil, 0, ErrInvalidMessageFormat
+		return "", nil, 0, 0, ErrInvalidMessageFormat
 	}
 
 	// 读取负载
 	payload := make([]byte, payloadLength)
 	if _, err := io.ReadFull(r, payload); err != nil {
-		return "", nil, 0, err
+		return "", nil, 0, 0, err
 	}
-	return msgType, payload, requestID, nil
+
+	return msgType, payload, requestID, flags, nil
 }
 
 // 验证消息类型是否有效
