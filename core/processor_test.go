@@ -467,7 +467,7 @@ func testErrorHandling(t *testing.T, tr transport.Transport) {
 
 		// 注册一个会返回错误的处理器
 		serverProcessor.RegisterHandler("error_test", func(ctx Context) error {
-			return ctx.Error("test error message")
+			return ctx.Reply(map[string]string{"error": "test error message"})
 		})
 
 		// 使用超时避免无限阻塞
@@ -508,8 +508,13 @@ func testErrorHandling(t *testing.T, tr transport.Transport) {
 
 	// 验证错误响应
 	require.NoError(t, err)
-	assert.True(t, resp.IsError())
-	assert.Contains(t, resp.Error(), "test error message")
+	// 检查响应类型是否为 "error_test"(因为我们使用的是 ctx.Reply)
+	assert.Equal(t, "error_test", resp.MsgType())
+	// 检查错误消息内容
+	var errorData map[string]string
+	err = resp.Bind(&errorData)
+	require.NoError(t, err)
+	assert.Equal(t, "test error message", errorData["error"])
 
 	wg.Wait()
 }
