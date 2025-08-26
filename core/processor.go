@@ -79,7 +79,11 @@ func (p *Processor) Listen() error {
 			msgType, rawData, requestID, err := p.codec.Decode(p.conn)
 			if err != nil {
 				p.logger.Errorf("Failed to decode message: %v", err)
-				return err
+				// 根据错误类型决定是否继续监听
+				if p.isRecoverableError(err) {
+					continue // 可恢复错误，继续监听
+				}
+				return err // 不可恢复错误，退出监听
 			}
 
 			// 检查消息大小
@@ -112,7 +116,8 @@ func (p *Processor) Listen() error {
 				connection: p.conn,
 				rawData:    rawData,
 				processor:  p,
-				writer:     NewMessageWriter(p),
+				writer:     NewMessageWriterWithRequest(p, requestID),
+				logger:     p.logger,
 			}
 
 			// 处理消息
@@ -180,4 +185,17 @@ func (p *Processor) Close() error {
 	p.cancel()
 	p.logger.Infof("Processor closed")
 	return p.conn.Close()
+}
+
+// isRecoverableError 判断错误是否可恢复
+func (p *Processor) isRecoverableError(err error) bool {
+	// 这里可以根据具体的错误类型来判断
+	// 例如：网络临时错误、序列化错误等可以恢复
+	// 连接关闭、严重协议错误等不可恢复
+	switch err.Error() {
+	case "EOF", "connection reset by peer":
+		return false // 连接已关闭，不可恢复
+	default:
+		return true // 其他错误暂时视为可恢复
+	}
 }
