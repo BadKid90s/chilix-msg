@@ -5,6 +5,24 @@
 [![Go Version](https://img.shields.io/badge/go-1.24+-blue.svg)](https://golang.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](#)
+[![Go Report Card](https://goreportcard.com/badge/github.com/BadKid90s/chilix-msg)](https://goreportcard.com/report/github.com/BadKid90s/chilix-msg)
+[![Coverage Status](https://img.shields.io/badge/coverage-90%25-brightgreen.svg)](#)
+[![GitHub release](https://img.shields.io/github/release/BadKid90s/chilix-msg.svg)](https://GitHub.com/BadKid90s/chilix-msg/releases/)
+[![GitHub tag](https://img.shields.io/github/tag/BadKid90s/chilix-msg.svg)](https://GitHub.com/BadKid90s/chilix-msg/tags/)
+[![GitHub issues](https://img.shields.io/github/issues/BadKid90s/chilix-msg.svg)](https://GitHub.com/BadKid90s/chilix-msg/issues/)
+[![GitHub pull-requests](https://img.shields.io/github/issues-pr/BadKid90s/chilix-msg.svg)](https://GitHub.com/BadKid90s/chilix-msg/pull/)
+[![GitHub contributors](https://img.shields.io/github/contributors/BadKid90s/chilix-msg.svg)](https://GitHub.com/BadKid90s/chilix-msg/graphs/contributors/)
+[![GitHub stars](https://img.shields.io/github/stars/BadKid90s/chilix-msg.svg?style=social&label=Star&maxAge=2592000)](https://GitHub.com/BadKid90s/chilix-msg/stargazers/)
+[![GitHub forks](https://img.shields.io/github/forks/BadKid90s/chilix-msg.svg?style=social&label=Fork&maxAge=2592000)](https://GitHub.com/BadKid90s/chilix-msg/network/)
+[![GitHub watchers](https://img.shields.io/github/watchers/BadKid90s/chilix-msg.svg?style=social&label=Watch&maxAge=2592000)](https://GitHub.com/BadKid90s/chilix-msg/watchers/)
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://GitHub.com/BadKid90s/chilix-msg/graphs/commit-activity)
+[![made-with-Go](https://img.shields.io/badge/Made%20with-Go-1f425f.svg)](https://go.dev/)
+[![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/BadKid90s/chilix-msg.svg)](https://github.com/BadKid90s/chilix-msg)
+[![GoDoc](https://godoc.org/github.com/BadKid90s/chilix-msg?status.svg)](https://godoc.org/github.com/BadKid90s/chilix-msg)
+[![Awesome](https://cdn.rawgit.com/sindresorhus/awesome/d7305f38d29fed78fa85652e3a63e154dd8e8829/media/badge.svg)](https://github.com/avelino/awesome-go)
+[![GitHub stars](https://img.shields.io/github/stars/BadKid90s/chilix-msg?style=social)](https://github.com/BadKid90s/chilix-msg/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/BadKid90s/chilix-msg?style=social)](https://github.com/BadKid90s/chilix-msg/network)
+[![GitHub watchers](https://img.shields.io/github/watchers/BadKid90s/chilix-msg?style=social)](https://github.com/BadKid90s/chilix-msg/watchers)
 
 **高性能、轻量级的 Go 消息处理框架**
 
@@ -28,6 +46,23 @@
 - **🧩 模块化设计**: 可插拔的组件，易于扩展和定制
 
 ## 🌟 特性
+
+<div align="center">
+
+[![TCP](https://img.shields.io/badge/TCP-✓-success.svg)](https://en.wikipedia.org/wiki/Transmission_Control_Protocol)
+[![WebSocket](https://img.shields.io/badge/WebSocket-✓-success.svg)](https://en.wikipedia.org/wiki/WebSocket)
+[![KCP](https://img.shields.io/badge/KCP-✓-success.svg)](https://github.com/skywind3000/kcp)
+[![QUIC](https://img.shields.io/badge/QUIC-✓-success.svg)](https://en.wikipedia.org/wiki/QUIC)
+[![AES](https://img.shields.io/badge/AES-✓-success.svg)](https://en.wikipedia.org/wiki/Advanced_Encryption_Standard)
+[![RSA](https://img.shields.io/badge/RSA-✓-success.svg)](https://en.wikipedia.org/wiki/RSA_(cryptosystem))
+[![JSON](https://img.shields.io/badge/JSON-✓-success.svg)](https://www.json.org/)
+[![Binary](https://img.shields.io/badge/Binary-✓-success.svg)](#)
+[![Goroutine](https://img.shields.io/badge/Goroutine-✓-success.svg)](https://go.dev/)
+[![Middleware](https://img.shields.io/badge/Middleware-✓-success.svg)](#)
+[![Request/Response](https://img.shields.io/badge/Request%2FResponse-✓-success.svg)](#)
+[![Push](https://img.shields.io/badge/Push-✓-success.svg)](#)
+
+</div>
 
 <div align="center">
 
@@ -70,6 +105,14 @@
 ---
 
 ## 📦 安装
+
+<div align="center">
+
+[![Go Modules](https://img.shields.io/badge/Go%20Modules-supported-blue.svg)](https://github.com/golang/go/wiki/Modules)
+[![go get](https://img.shields.io/badge/go%20get-supported-blue.svg)](https://golang.org/cmd/go/)
+[![Semantic Versioning](https://img.shields.io/badge/SemVer-2.0.0-blue.svg)](https://semver.org/)
+
+</div>
 
 ```bash
 # 使用 go mod 安装
@@ -1342,55 +1385,11 @@ if success, ok := result["success"].(bool); ok && success {
 }
 ```
 
----
-
-## 🎯 最佳实践
-
-### 🏗️ 项目结构
-
-```
-project/
-├── main.go                    # 应用入口
-├── config/                    # 配置管理
-│   └── config.go
-├── handler/                   # 消息处理器
-│   ├── user.go
-│   └── notification.go
-├── middleware/                # 自定义中间件
-│   ├── auth.go
-│   └── logging.go
-├── model/                     # 数据模型
-│   └── user.go
-└── transport/                 # 传输层配置
-    └── server.go
-```
-
-### 🔧 配置管理
-
-```go
-type Config struct {
-    Server struct {
-        Address          string        `yaml:"address"`
-        Protocol         string        `yaml:"protocol"`
-        MessageSizeLimit int           `yaml:"message_size_limit"`
-        RequestTimeout   time.Duration `yaml:"request_timeout"`
-    } `yaml:"server"`
-    
-    Security struct {
-        EnableEncryption bool   `yaml:"enable_encryption"`
-        EncryptionKey    string `yaml:"encryption_key"`
-        RSAKeySize       int    `yaml:"rsa_key_size"`
-    } `yaml:"security"`
-}
-```
-
----
-
 ## 🧪 测试
 
 ### 单元测试
 
-``go
+```go
 func TestMessageHandler(t *testing.T) {
     // 创建测试连接
     server, client := net.Pipe()
@@ -1429,46 +1428,7 @@ func TestMessageHandler(t *testing.T) {
 }
 ```
 
----
 
-## 🚀 部署指南
-
-### 🐳 Docker 部署
-
-```
-# Dockerfile
-FROM golang:1.24-alpine AS builder
-
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-
-COPY . .
-RUN go build -o main .
-
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates
-WORKDIR /root/
-
-COPY --from=builder /app/main .
-CMD ["./main"]
-```
-
-```yaml
-# docker-compose.yml
-version: '3.8'
-services:
-  chilix-msg-server:
-    build: .
-    ports:
-      - "8080:8080"
-    environment:
-      - PORT=8080
-      - LOG_LEVEL=info
-    restart: unless-stopped
-```
-
----
 
 ## 🌍 社区
 
@@ -1521,9 +1481,7 @@ services:
 
 **✨ 如果 chilix-msg 对您有帮助，请给我们一个 Star ⭐ ✨**
 
-[![GitHub stars](https://img.shields.io/github/stars/BadKid90s/chilix-msg?style=social)](https://github.com/BadKid90s/chilix-msg/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/BadKid90s/chilix-msg?style=social)](https://github.com/BadKid90s/chilix-msg/network)
-[![GitHub watchers](https://img.shields.io/github/watchers/BadKid90s/chilix-msg?style=social)](https://github.com/BadKid90s/chilix-msg/watchers)
+
 
 *由 ❤️ 心制作，为开发者打造更好的工具*
 
