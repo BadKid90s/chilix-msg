@@ -12,14 +12,14 @@
 [![GitHub issues](https://img.shields.io/github/issues/BadKid90s/chilix-msg.svg)](https://GitHub.com/BadKid90s/chilix-msg/issues/)
 [![GitHub pull-requests](https://img.shields.io/github/issues-pr/BadKid90s/chilix-msg.svg)](https://GitHub.com/BadKid90s/chilix-msg/pull/)
 [![GitHub contributors](https://img.shields.io/github/contributors/BadKid90s/chilix-msg.svg)](https://GitHub.com/BadKid90s/chilix-msg/graphs/contributors/)
-[![GitHub stars](https://img.shields.io/github/stars/BadKid90s/chilix-msg.svg?style=social&label=Star&maxAge=2592000)](https://GitHub.com/BadKid90s/chilix-msg/stargazers/)
-[![GitHub forks](https://img.shields.io/github/forks/BadKid90s/chilix-msg.svg?style=social&label=Fork&maxAge=2592000)](https://GitHub.com/BadKid90s/chilix-msg/network/)
-[![GitHub watchers](https://img.shields.io/github/watchers/BadKid90s/chilix-msg.svg?style=social&label=Watch&maxAge=2592000)](https://GitHub.com/BadKid90s/chilix-msg/watchers/)
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://GitHub.com/BadKid90s/chilix-msg/graphs/commit-activity)
 [![made-with-Go](https://img.shields.io/badge/Made%20with-Go-1f425f.svg)](https://go.dev/)
 [![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/BadKid90s/chilix-msg.svg)](https://github.com/BadKid90s/chilix-msg)
 [![GoDoc](https://godoc.org/github.com/BadKid90s/chilix-msg?status.svg)](https://godoc.org/github.com/BadKid90s/chilix-msg)
 [![Awesome](https://cdn.rawgit.com/sindresorhus/awesome/d7305f38d29fed78fa85652e3a63e154dd8e8829/media/badge.svg)](https://github.com/avelino/awesome-go)
+
+<p></p>
+
 [![GitHub stars](https://img.shields.io/github/stars/BadKid90s/chilix-msg?style=social)](https://github.com/BadKid90s/chilix-msg/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/BadKid90s/chilix-msg?style=social)](https://github.com/BadKid90s/chilix-msg/network)
 [![GitHub watchers](https://img.shields.io/github/watchers/BadKid90s/chilix-msg?style=social)](https://github.com/BadKid90s/chilix-msg/watchers)
