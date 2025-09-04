@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +13,264 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestHelper provides common testing utilities
+type TestHelper struct {
+	logger log.Logger
+}
+
+// NewTestHelper creates a new test helper
+func NewTestHelper() *TestHelper {
+	return &TestHelper{
+		logger: log.NewDefaultLogger(),
+	}
+}
+
+// TestServer represents a test server
+type TestServer struct {
+	Listener  transport.Listener
+	Processor *Processor
+	CloseOnce sync.Once
+	Ready     chan struct{}
+}
+
+// TestClient represents a test client
+type TestClient struct {
+	Conn      transport.Connection
+	Processor *Processor
+}
+
+// StartServer starts a test server with the given transport and handler
+func (h *TestHelper) StartServer(tr transport.Transport, handler func(*Processor)) (*TestServer, error) {
+	h.logger.Debugf("Starting test server with transport %T", tr)
+
+	listener, err := tr.Listen("127.0.0.1:0")
+	if err != nil {
+		h.logger.Errorf("Failed to create listener: %v", err)
+		return nil, fmt.Errorf("failed to create listener: %w", err)
+	}
+
+	h.logger.Debugf("Server listening on %s", listener.Addr().String())
+
+	server := &TestServer{
+		Listener: listener,
+		Ready:    make(chan struct{}),
+	}
+
+	// Channel to signal server encountered an error
+	serverError := make(chan error, 1)
+
+	// Start server in a goroutine
+	go func() {
+		h.logger.Debugf("Waiting for incoming connection")
+		conn, err := listener.Accept()
+		if err != nil {
+			h.logger.Errorf("Accept failed: %v", err)
+			serverError <- fmt.Errorf("accept failed: %w", err)
+			return
+		}
+		h.logger.Debugf("Accepted connection from %s", conn.RemoteAddr().String())
+
+		processor := NewProcessor(conn, ProcessorOptions{
+			Serializer:       serializer.DefaultSerializer,
+			MessageSizeLimit: 1024 * 1024,
+			RequestTimeout:   1 * time.Second, // 减少超时时间以提高测试速度
+			Logger:           h.logger,
+		})
+
+		server.Processor = processor
+
+		// Run the handler
+		if handler != nil {
+			h.logger.Debugf("Running server handler")
+			handler(processor)
+		}
+
+		// Notify that server is fully ready for use
+		close(server.Ready)
+
+		// Start listening
+		h.logger.Debugf("Starting processor listen loop")
+		if err := processor.Listen(); err != nil {
+			h.logger.Errorf("Processor listen failed: %v", err)
+		}
+		h.logger.Debugf("Processor listen loop finished")
+	}()
+
+	// Non-blocking return - server will start asynchronously
+	// Client should connect soon after this returns
+	return server, nil
+}
+
+// CloseServer closes the test server
+func (s *TestServer) Close() error {
+	var err error
+	s.CloseOnce.Do(func() {
+		// Close processor first
+		if s.Processor != nil {
+			h := s.Processor.Logger()
+			if h != nil {
+				h.Debugf("Closing processor")
+				if procErr := s.Processor.Close(); procErr != nil {
+					h.Errorf("Failed to close processor: %v", procErr)
+					err = fmt.Errorf("failed to close processor: %w", procErr)
+				} else {
+					h.Debugf("Processor closed successfully")
+				}
+			} else {
+				// Fallback to default logger
+				defaultLogger := log.NewDefaultLogger()
+				defaultLogger.Debugf("Closing processor")
+				if procErr := s.Processor.Close(); procErr != nil {
+					defaultLogger.Errorf("Failed to close processor: %v", procErr)
+					err = fmt.Errorf("failed to close processor: %w", procErr)
+				} else {
+					defaultLogger.Debugf("Processor closed successfully")
+				}
+			}
+		}
+
+		// Close listener
+		if s.Listener != nil {
+			defaultLogger := log.NewDefaultLogger()
+			defaultLogger.Debugf("Closing listener")
+			if listenerErr := s.Listener.Close(); listenerErr != nil {
+				defaultLogger.Errorf("Failed to close listener: %v", listenerErr)
+				if err == nil {
+					err = fmt.Errorf("failed to close listener: %w", listenerErr)
+				} else {
+					err = fmt.Errorf("%v; failed to close listener: %w", err, listenerErr)
+				}
+			} else {
+				defaultLogger.Debugf("Listener closed successfully")
+			}
+		}
+	})
+	return err
+}
+
+// CloseClient closes the test client
+func (c *TestClient) Close() error {
+	if c.Processor != nil {
+		h := c.Processor.Logger()
+		if h != nil {
+			h.Debugf("Closing client processor")
+			return c.Processor.Close()
+		} else {
+			// Fallback to default logger
+			defaultLogger := log.NewDefaultLogger()
+			defaultLogger.Debugf("Closing client processor")
+			return c.Processor.Close()
+		}
+	}
+	return c.Conn.Close()
+}
+
+// StartClient starts a test client with the given transport and address
+func (h *TestHelper) StartClient(tr transport.Transport, addr string) (*TestClient, error) {
+	h.logger.Debugf("Starting test client to connect to %s with transport %T", addr, tr)
+
+	// Try to connect with timeout
+	var conn transport.Connection
+	var connectErr error
+
+	done := make(chan struct{})
+	go func() {
+		h.logger.Debugf("Attempting to dial server at %s", addr)
+		conn, connectErr = tr.Dial(addr)
+		if connectErr != nil {
+			h.logger.Errorf("Dial failed: %v", connectErr)
+		} else {
+			h.logger.Debugf("Connected to server at %s", conn.RemoteAddr().String())
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		if connectErr != nil {
+			return nil, fmt.Errorf("failed to dial: %w", connectErr)
+		}
+	case <-time.After(30 * time.Second): // 增加超时时间到30秒
+		h.logger.Errorf("Client connect timeout after 30 seconds")
+		return nil, fmt.Errorf("client connect timeout")
+	}
+
+	processor := NewProcessor(conn, ProcessorOptions{
+		Serializer:       serializer.DefaultSerializer,
+		MessageSizeLimit: 1024 * 1024,
+		RequestTimeout:   1 * time.Second, // 减少超时时间以提高测试速度
+		Logger:           h.logger,
+	})
+
+	client := &TestClient{
+		Conn:      conn,
+		Processor: processor,
+	}
+
+	// Start client listener in a goroutine
+	h.logger.Debugf("Starting client processor listen loop")
+	go func() {
+		if err := processor.Listen(); err != nil {
+			h.logger.Errorf("Client processor listen failed: %v", err)
+		}
+		h.logger.Debugf("Client processor listen loop finished")
+	}()
+
+	return client, nil
+}
+
+// TimeoutError represents a timeout error
+type TimeoutError struct {
+	Operation string
+}
+
+func (e *TimeoutError) Error() string {
+	return fmt.Sprintf("timeout waiting for %s", e.Operation)
+}
+
+// TestError represents a general test error
+type TestError struct {
+	Message string
+	Cause   error
+}
+
+func (e *TestError) Error() string {
+	if e.Cause != nil {
+		return fmt.Sprintf("%s: %v", e.Message, e.Cause)
+	}
+	return e.Message
+}
+
+// Unwrap returns the underlying cause of the error
+func (e *TestError) Unwrap() error {
+	return e.Cause
+}
+
+// WithTimeout runs a function with a timeout
+func WithTimeout(fn func() error, timeout time.Duration) error {
+	done := make(chan error, 1)
+	go func() {
+		done <- fn()
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(timeout):
+		return &TimeoutError{Operation: "operation"}
+	}
+}
+
+// WaitForServerReady waits for the server to be ready
+func (s *TestServer) WaitForServerReady(timeout time.Duration) error {
+	select {
+	case <-s.Ready:
+		return nil
+	case <-time.After(timeout):
+		return fmt.Errorf("server not ready within timeout")
+	}
+}
 
 // TestProcessorWithAllTransports 测试所有传输协议下的 Processor 功能
 func TestProcessorWithAllTransports(t *testing.T) {
@@ -37,7 +296,7 @@ func TestProcessorWithAllTransports(t *testing.T) {
 			skip:      false,
 		},
 		{
-			name:      "QUIC", 
+			name:      "QUIC",
 			transport: transport.NewQUICTransport(),
 			skip:      false,
 		},
@@ -84,35 +343,12 @@ func TestProcessorWithAllTransports(t *testing.T) {
 
 // testBasicMessageSendReceive 测试基本的消息发送和接收
 func testBasicMessageSendReceive(t *testing.T, tr transport.Transport) {
-	// 创建服务端监听器
-	listener, err := tr.Listen("127.0.0.1:0")
-	require.NoError(t, err)
-	defer listener.Close()
+	helper := NewTestHelper()
 
+	// 创建服务端
 	messageReceived := make(chan string, 1)
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	// 启动服务端
-	go func() {
-		defer wg.Done()
-		
-		conn, err := listener.Accept()
-		if err != nil {
-			t.Errorf("Accept failed: %v", err)
-			return
-		}
-		defer conn.Close()
-
-		processor := NewProcessor(conn, ProcessorOptions{
-			Serializer:       serializer.DefaultSerializer,
-			MessageSizeLimit: 1024 * 1024,
-			RequestTimeout:   5 * time.Second,
-			Logger:           log.NewDefaultLogger(),
-		})
-		defer processor.Close()
-
-		processor.RegisterHandler("test_message", func(ctx Context) error {
+	server, err := helper.StartServer(tr, func(p *Processor) {
+		p.RegisterHandler("test_message", func(ctx Context) error {
 			var msg string
 			if err := ctx.Bind(&msg); err != nil {
 				return err
@@ -120,82 +356,46 @@ func testBasicMessageSendReceive(t *testing.T, tr transport.Transport) {
 			messageReceived <- msg
 			return nil
 		})
-
-		// 使用超时避免无限阻塞
-		done := make(chan error, 1)
-		go func() {
-			done <- processor.Listen()
-		}()
-		
-		select {
-		case <-done:
-		case <-time.After(8 * time.Second):
-			t.Log("Server listen timeout")
-		}
-	}()
-
-	// 等待服务端准备就绪
-	time.Sleep(200 * time.Millisecond)
-
-	// 创建客户端连接
-	clientConn, err := tr.Dial(listener.Addr().String())
-	require.NoError(t, err)
-	defer clientConn.Close()
-
-	clientProcessor := NewProcessor(clientConn, ProcessorOptions{
-		Serializer:       serializer.DefaultSerializer,
-		MessageSizeLimit: 1024 * 1024,
-		RequestTimeout:   5 * time.Second,
-		Logger:           log.NewDefaultLogger(),
 	})
-	defer clientProcessor.Close()
+	require.NoError(t, err, "Failed to start server")
+	defer server.Close()
+
+	t.Logf("Server started successfully, address: %s", server.Listener.Addr().String())
+
+	// 创建客户端
+	t.Log("Attempting to start client...")
+	client, err := helper.StartClient(tr, server.Listener.Addr().String())
+	require.NoError(t, err, "Failed to start client")
+	defer client.Close()
+
+	t.Log("Client started successfully")
 
 	// 发送消息
 	testMsg := "Hello from client!"
-	err = clientProcessor.Send("test_message", testMsg)
-	require.NoError(t, err)
+	t.Logf("Sending message: %s", testMsg)
+	err = client.Processor.Send("test_message", testMsg)
+	require.NoError(t, err, "Failed to send message")
+
+	t.Log("Message sent successfully")
 
 	// 验证消息接收
 	select {
 	case receivedMsg := <-messageReceived:
 		assert.Equal(t, testMsg, receivedMsg)
-	case <-time.After(5 * time.Second):
+		t.Log("Message received successfully")
+	case <-time.After(5 * time.Second): // 增加超时时间
 		t.Fatal("Timeout waiting for message")
 	}
-
-	wg.Wait()
 }
 
 // testRequestResponse 测试请求-响应模式
 func testRequestResponse(t *testing.T, tr transport.Transport) {
-	listener, err := tr.Listen("127.0.0.1:0")
-	require.NoError(t, err)
-	defer listener.Close()
+	helper := NewTestHelper()
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	// 启动服务端
-	go func() {
-		defer wg.Done()
-		
-		conn, err := listener.Accept()
-		if err != nil {
-			t.Errorf("Accept failed: %v", err)
-			return
-		}
-		defer conn.Close()
-
-		serverProcessor := NewProcessor(conn, ProcessorOptions{
-			Serializer:       serializer.DefaultSerializer,
-			MessageSizeLimit: 1024 * 1024,
-			RequestTimeout:   5 * time.Second,
-			Logger:           log.NewDefaultLogger(),
-		})
-		defer serverProcessor.Close()
-
+	// 创建服务端
+	server, err := helper.StartServer(tr, func(p *Processor) {
 		// 注册echo处理器
-		serverProcessor.RegisterHandler("echo", func(ctx Context) error {
+		p.RegisterHandler("echo", func(ctx Context) error {
 			var msg string
 			if err := ctx.Bind(&msg); err != nil {
 				return err
@@ -203,43 +403,18 @@ func testRequestResponse(t *testing.T, tr transport.Transport) {
 			// 回复相同的消息
 			return ctx.Reply("ECHO: " + msg)
 		})
-
-		// 使用超时避免无限阻塞
-		done := make(chan error, 1)
-		go func() {
-			done <- serverProcessor.Listen()
-		}()
-		
-		select {
-		case <-done:
-		case <-time.After(12 * time.Second):
-			t.Log("Server listen timeout")
-		}
-	}()
-
-	time.Sleep(200 * time.Millisecond)
-
-	clientConn, err := tr.Dial(listener.Addr().String())
-	require.NoError(t, err)
-	defer clientConn.Close()
-
-	clientProcessor := NewProcessor(clientConn, ProcessorOptions{
-		Serializer:       serializer.DefaultSerializer,
-		MessageSizeLimit: 1024 * 1024,
-		RequestTimeout:   5 * time.Second,
-		Logger:           log.NewDefaultLogger(),
 	})
-	defer clientProcessor.Close()
+	require.NoError(t, err)
+	defer server.Close()
 
-	// 启动客户端监听
-	go func() {
-		clientProcessor.Listen()
-	}()
-	time.Sleep(100 * time.Millisecond)
+	// 创建客户端
+	client, err := helper.StartClient(tr, server.Listener.Addr().String())
+	require.NoError(t, err)
+	defer client.Close()
 
 	// 发送请求并等待响应
 	testMsg := "Hello Server!"
-	resp, err := clientProcessor.Request("echo", testMsg)
+	resp, err := client.Processor.Request("echo", testMsg)
 	require.NoError(t, err)
 
 	var responseMsg string
@@ -247,121 +422,56 @@ func testRequestResponse(t *testing.T, tr transport.Transport) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "ECHO: "+testMsg, responseMsg)
-
-	wg.Wait()
 }
 
 // testMiddleware 测试中间件功能
 func testMiddleware(t *testing.T, tr transport.Transport) {
-	listener, err := tr.Listen("127.0.0.1:0")
-	require.NoError(t, err)
-	defer listener.Close()
+	helper := NewTestHelper()
 
+	// 创建服务端
 	middlewareExecuted := make(chan bool, 1)
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		
-		conn, err := listener.Accept()
-		if err != nil {
-			t.Errorf("Accept failed: %v", err)
-			return
-		}
-		defer conn.Close()
-
-		serverProcessor := NewProcessor(conn, ProcessorOptions{
-			Serializer:       serializer.DefaultSerializer,
-			MessageSizeLimit: 1024 * 1024,
-			RequestTimeout:   5 * time.Second,
-			Logger:           log.NewDefaultLogger(),
-		})
-		defer serverProcessor.Close()
-
+	server, err := helper.StartServer(tr, func(p *Processor) {
 		// 注册测试中间件
-		serverProcessor.Use(func(next Handler) Handler {
+		p.Use(func(next Handler) Handler {
 			return func(ctx Context) error {
 				middlewareExecuted <- true
 				return next(ctx)
 			}
 		})
 
-		serverProcessor.RegisterHandler("test", func(ctx Context) error {
+		p.RegisterHandler("test", func(ctx Context) error {
 			return nil
 		})
-
-		// 使用超时避免无限阻塞
-		done := make(chan error, 1)
-		go func() {
-			done <- serverProcessor.Listen()
-		}()
-		
-		select {
-		case <-done:
-		case <-time.After(8 * time.Second):
-			t.Log("Server listen timeout")
-		}
-	}()
-
-	time.Sleep(200 * time.Millisecond)
-
-	clientConn, err := tr.Dial(listener.Addr().String())
-	require.NoError(t, err)
-	defer clientConn.Close()
-
-	clientProcessor := NewProcessor(clientConn, ProcessorOptions{
-		Serializer:       serializer.DefaultSerializer,
-		MessageSizeLimit: 1024 * 1024,
-		RequestTimeout:   5 * time.Second,
-		Logger:           log.NewDefaultLogger(),
 	})
-	defer clientProcessor.Close()
+	require.NoError(t, err)
+	defer server.Close()
+
+	// 创建客户端
+	client, err := helper.StartClient(tr, server.Listener.Addr().String())
+	require.NoError(t, err)
+	defer client.Close()
 
 	// 发送消息触发中间件
-	err = clientProcessor.Send("test", "middleware test")
+	err = client.Processor.Send("test", "middleware test")
 	require.NoError(t, err)
 
 	// 验证中间件被执行
 	select {
 	case executed := <-middlewareExecuted:
 		assert.True(t, executed)
-	case <-time.After(5 * time.Second):
+	case <-time.After(2 * time.Second): // 减少超时时间
 		t.Fatal("Middleware was not executed")
 	}
-
-	wg.Wait()
 }
 
 // testConcurrentProcessing 测试并发处理
 func testConcurrentProcessing(t *testing.T, tr transport.Transport) {
-	listener, err := tr.Listen("127.0.0.1:0")
-	require.NoError(t, err)
-	defer listener.Close()
+	helper := NewTestHelper()
 
+	// 创建服务端
 	messageCount := make(chan int, 100)
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		
-		conn, err := listener.Accept()
-		if err != nil {
-			t.Errorf("Accept failed: %v", err)
-			return
-		}
-		defer conn.Close()
-
-		serverProcessor := NewProcessor(conn, ProcessorOptions{
-			Serializer:       serializer.DefaultSerializer,
-			MessageSizeLimit: 1024 * 1024,
-			RequestTimeout:   5 * time.Second,
-			Logger:           log.NewDefaultLogger(),
-		})
-		defer serverProcessor.Close()
-
-		serverProcessor.RegisterHandler("concurrent_test", func(ctx Context) error {
+	server, err := helper.StartServer(tr, func(p *Processor) {
+		p.RegisterHandler("concurrent_test", func(ctx Context) error {
 			var id int
 			if err := ctx.Bind(&id); err != nil {
 				return err
@@ -369,39 +479,14 @@ func testConcurrentProcessing(t *testing.T, tr transport.Transport) {
 			messageCount <- id
 			return nil
 		})
-
-		// 使用超时避免无限阻塞
-		done := make(chan error, 1)
-		go func() {
-			done <- serverProcessor.Listen()
-		}()
-		
-		select {
-		case <-done:
-		case <-time.After(15 * time.Second):
-			t.Log("Server listen timeout")
-		}
-	}()
-
-	time.Sleep(200 * time.Millisecond)
-
-	clientConn, err := tr.Dial(listener.Addr().String())
-	require.NoError(t, err)
-	defer clientConn.Close()
-
-	clientProcessor := NewProcessor(clientConn, ProcessorOptions{
-		Serializer:       serializer.DefaultSerializer,
-		MessageSizeLimit: 1024 * 1024,
-		RequestTimeout:   5 * time.Second,
-		Logger:           log.NewDefaultLogger(),
 	})
-	defer clientProcessor.Close()
+	require.NoError(t, err)
+	defer server.Close()
 
-	// 启动客户端监听
-	go func() {
-		clientProcessor.Listen()
-	}()
-	time.Sleep(100 * time.Millisecond)
+	// 创建客户端
+	client, err := helper.StartClient(tr, server.Listener.Addr().String())
+	require.NoError(t, err)
+	defer client.Close()
 
 	// 并发发送多个消息
 	const numMessages = 10
@@ -412,8 +497,8 @@ func testConcurrentProcessing(t *testing.T, tr transport.Transport) {
 		go func(id int) {
 			defer clientWg.Done()
 			// 添加小延迟避免并发写入竞争
-			time.Sleep(time.Duration(id*10) * time.Millisecond)
-			err := clientProcessor.Send("concurrent_test", id)
+			time.Sleep(time.Duration(id*5) * time.Millisecond) // 减少延迟时间
+			err := client.Processor.Send("concurrent_test", id)
 			if err != nil {
 				t.Errorf("Send failed: %v", err)
 			}
@@ -428,82 +513,35 @@ func testConcurrentProcessing(t *testing.T, tr transport.Transport) {
 		select {
 		case id := <-messageCount:
 			received[id] = true
-		case <-time.After(5 * time.Second):
+		case <-time.After(2 * time.Second): // 减少超时时间
 			t.Fatal("Timeout waiting for concurrent messages")
 		}
 	}
 
 	assert.Equal(t, numMessages, len(received))
-
-	wg.Wait()
 }
 
 // testErrorHandling 测试错误处理
 func testErrorHandling(t *testing.T, tr transport.Transport) {
-	listener, err := tr.Listen("127.0.0.1:0")
-	require.NoError(t, err)
-	defer listener.Close()
+	helper := NewTestHelper()
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		
-		conn, err := listener.Accept()
-		if err != nil {
-			t.Errorf("Accept failed: %v", err)
-			return
-		}
-		defer conn.Close()
-
-		serverProcessor := NewProcessor(conn, ProcessorOptions{
-			Serializer:       serializer.DefaultSerializer,
-			MessageSizeLimit: 1024 * 1024,
-			RequestTimeout:   5 * time.Second,
-			Logger:           log.NewDefaultLogger(),
-		})
-		defer serverProcessor.Close()
-
+	// 创建服务端
+	server, err := helper.StartServer(tr, func(p *Processor) {
 		// 注册一个会返回错误的处理器
-		serverProcessor.RegisterHandler("error_test", func(ctx Context) error {
+		p.RegisterHandler("error_test", func(ctx Context) error {
 			return ctx.Reply(map[string]string{"error": "test error message"})
 		})
-
-		// 使用超时避免无限阻塞
-		done := make(chan error, 1)
-		go func() {
-			done <- serverProcessor.Listen()
-		}()
-		
-		select {
-		case <-done:
-		case <-time.After(10 * time.Second):
-			t.Log("Server listen timeout")
-		}
-	}()
-
-	time.Sleep(200 * time.Millisecond)
-
-	clientConn, err := tr.Dial(listener.Addr().String())
-	require.NoError(t, err)
-	defer clientConn.Close()
-
-	clientProcessor := NewProcessor(clientConn, ProcessorOptions{
-		Serializer:       serializer.DefaultSerializer,
-		MessageSizeLimit: 1024 * 1024,
-		RequestTimeout:   5 * time.Second,
-		Logger:           log.NewDefaultLogger(),
 	})
-	defer clientProcessor.Close()
+	require.NoError(t, err)
+	defer server.Close()
 
-	go func() {
-		clientProcessor.Listen()
-	}()
-	time.Sleep(100 * time.Millisecond)
+	// 创建客户端
+	client, err := helper.StartClient(tr, server.Listener.Addr().String())
+	require.NoError(t, err)
+	defer client.Close()
 
 	// 发送请求触发错误
-	resp, err := clientProcessor.Request("error_test", "trigger error")
+	resp, err := client.Processor.Request("error_test", "trigger error")
 	require.NoError(t, err)
 
 	// 验证错误响应
@@ -515,66 +553,32 @@ func testErrorHandling(t *testing.T, tr transport.Transport) {
 	err = resp.Bind(&errorData)
 	require.NoError(t, err)
 	assert.Equal(t, "test error message", errorData["error"])
-
-	wg.Wait()
 }
 
 // testRequestTimeout 测试请求超时
 func testRequestTimeout(t *testing.T, tr transport.Transport) {
-	listener, err := tr.Listen("127.0.0.1:0")
-	require.NoError(t, err)
-	defer listener.Close()
+	helper := NewTestHelper()
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		
-		conn, err := listener.Accept()
-		if err != nil {
-			t.Errorf("Accept failed: %v", err)
-			return
-		}
-		defer conn.Close()
-
-		serverProcessor := NewProcessor(conn, ProcessorOptions{
-			Serializer:       serializer.DefaultSerializer,
-			MessageSizeLimit: 1024 * 1024,
-			RequestTimeout:   5 * time.Second,
-			Logger:           log.NewDefaultLogger(),
-		})
-		defer serverProcessor.Close()
-
+	// 创建服务端
+	server, err := helper.StartServer(tr, func(p *Processor) {
 		// 注册一个永不响应的处理器
-		serverProcessor.RegisterHandler("timeout_test", func(ctx Context) error {
+		p.RegisterHandler("timeout_test", func(ctx Context) error {
 			// 不发送响应，模拟超时
 			return nil
 		})
-
-		// 使用超时避免无限阻塞
-		done := make(chan error, 1)
-		go func() {
-			done <- serverProcessor.Listen()
-		}()
-		
-		select {
-		case <-done:
-		case <-time.After(10 * time.Second):
-			t.Log("Server listen timeout")
-		}
-	}()
-
-	time.Sleep(200 * time.Millisecond)
-
-	clientConn, err := tr.Dial(listener.Addr().String())
+	})
 	require.NoError(t, err)
-	defer clientConn.Close()
+	defer server.Close()
 
-	clientProcessor := NewProcessor(clientConn, ProcessorOptions{
+	// 创建客户端，使用短超时时间
+	conn, err := tr.Dial(server.Listener.Addr().String())
+	require.NoError(t, err)
+	defer conn.Close()
+
+	clientProcessor := NewProcessor(conn, ProcessorOptions{
 		Serializer:       serializer.DefaultSerializer,
 		MessageSizeLimit: 1024 * 1024,
-		RequestTimeout:   1 * time.Second, // 短超时时间
+		RequestTimeout:   500 * time.Millisecond, // 短超时时间
 		Logger:           log.NewDefaultLogger(),
 	})
 	defer clientProcessor.Close()
@@ -582,20 +586,18 @@ func testRequestTimeout(t *testing.T, tr transport.Transport) {
 	go func() {
 		clientProcessor.Listen()
 	}()
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // 减少等待时间
 
 	// 发送请求并期望超时
 	_, err = clientProcessor.Request("timeout_test", "this will timeout")
 	assert.Error(t, err)
 	assert.Equal(t, ErrRequestTimeout, err)
-
-	wg.Wait()
 }
 
 // TestProcessorAdvancedFeatures 测试处理器高级功能
 func TestProcessorAdvancedFeatures(t *testing.T) {
 	transport := transport.NewTCPTransport()
-	
+
 	// 测试消息大小限制
 	t.Run("MessageSizeLimit", func(t *testing.T) {
 		testMessageSizeLimit(t, transport)
@@ -610,108 +612,71 @@ func TestProcessorAdvancedFeatures(t *testing.T) {
 	t.Run("ProcessorLifecycle", func(t *testing.T) {
 		testProcessorLifecycle(t, transport)
 	})
+
+	// 测试空消息处理
+	t.Run("EmptyMessage", func(t *testing.T) {
+		testEmptyMessage(t, transport)
+	})
+
+	// 测试大消息处理
+	t.Run("LargeMessage", func(t *testing.T) {
+		testLargeMessage(t, transport)
+	})
+
+	// 测试未注册的消息类型
+	t.Run("UnregisteredMessageType", func(t *testing.T) {
+		testUnregisteredMessageType(t, transport)
+	})
 }
 
 // testMessageSizeLimit 测试消息大小限制
 func testMessageSizeLimit(t *testing.T, tr transport.Transport) {
-	listener, err := tr.Listen("127.0.0.1:0")
-	require.NoError(t, err)
-	defer listener.Close()
+	helper := NewTestHelper()
 
+	// 创建服务端，使用很小的限制
 	messageReceived := make(chan bool, 1)
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		
-		conn, err := listener.Accept()
-		if err != nil {
-			t.Errorf("Accept failed: %v", err)
-			return
-		}
-		defer conn.Close()
-
-		processor := NewProcessor(conn, ProcessorOptions{
-			MessageSizeLimit: 10, // 很小的限制
-			Logger:           log.NewDefaultLogger(),
-		})
-		defer processor.Close()
-
-		processor.RegisterHandler("test", func(ctx Context) error {
+	server, err := helper.StartServer(tr, func(p *Processor) {
+		// 修改处理器的消息大小限制
+		p.opts.MessageSizeLimit = 10
+		p.RegisterHandler("test", func(ctx Context) error {
 			messageReceived <- true
 			return nil
 		})
-
-		// 使用超时避免无限阻塞
-		done := make(chan error, 1)
-		go func() {
-			done <- processor.Listen()
-		}()
-		
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			t.Log("Server listen timeout")
-		}
-	}()
-
-	time.Sleep(200 * time.Millisecond)
-
-	clientConn, err := tr.Dial(listener.Addr().String())
-	require.NoError(t, err)
-	defer clientConn.Close()
-
-	clientProcessor := NewProcessor(clientConn, ProcessorOptions{
-		Logger: log.NewDefaultLogger(),
 	})
-	defer clientProcessor.Close()
+	require.NoError(t, err)
+	defer server.Close()
+
+	// 创建客户端
+	client, err := helper.StartClient(tr, server.Listener.Addr().String())
+	require.NoError(t, err)
+	defer client.Close()
 
 	// 发送超大消息（会被服务端忽略）
 	longMessage := strings.Repeat("a", 1000)
-	err = clientProcessor.Send("test", longMessage)
+	err = client.Processor.Send("test", longMessage)
 	require.NoError(t, err)
 
 	// 验证消息未被处理（由于大小限制）
 	select {
 	case <-messageReceived:
 		t.Fatal("Message should not have been processed due to size limit")
-	case <-time.After(2 * time.Second):
+	case <-time.After(2 * time.Second): // 减少超时时间
 		// 预期的行为：消息被忽略
 	}
-
-	wg.Wait()
 }
 
 // testCustomSerializer 测试自定义序列化器
 func testCustomSerializer(t *testing.T, tr transport.Transport) {
-	listener, err := tr.Listen("127.0.0.1:0")
-	require.NoError(t, err)
-	defer listener.Close()
+	helper := NewTestHelper()
 
+	// 创建服务端
 	messageReceived := make(chan map[string]interface{}, 1)
-	var wg sync.WaitGroup
-	wg.Add(1)
-
 	customSerializer := &serializer.JSON{}
 
-	go func() {
-		defer wg.Done()
-		
-		conn, err := listener.Accept()
-		if err != nil {
-			t.Errorf("Accept failed: %v", err)
-			return
-		}
-		defer conn.Close()
-
-		processor := NewProcessor(conn, ProcessorOptions{
-			Serializer: customSerializer,
-			Logger:     log.NewDefaultLogger(),
-		})
-		defer processor.Close()
-
-		processor.RegisterHandler("json_test", func(ctx Context) error {
+	server, err := helper.StartServer(tr, func(p *Processor) {
+		// 修改处理器的序列化器
+		p.opts.Serializer = customSerializer
+		p.RegisterHandler("json_test", func(ctx Context) error {
 			var data map[string]interface{}
 			if err := ctx.Bind(&data); err != nil {
 				return err
@@ -719,38 +684,24 @@ func testCustomSerializer(t *testing.T, tr transport.Transport) {
 			messageReceived <- data
 			return nil
 		})
-
-		// 使用超时避免无限阻塞
-		done := make(chan error, 1)
-		go func() {
-			done <- processor.Listen()
-		}()
-		
-		select {
-		case <-done:
-		case <-time.After(8 * time.Second):
-			t.Log("Server listen timeout")
-		}
-	}()
-
-	time.Sleep(200 * time.Millisecond)
-
-	clientConn, err := tr.Dial(listener.Addr().String())
-	require.NoError(t, err)
-	defer clientConn.Close()
-
-	clientProcessor := NewProcessor(clientConn, ProcessorOptions{
-		Serializer: customSerializer,
-		Logger:     log.NewDefaultLogger(),
 	})
-	defer clientProcessor.Close()
+	require.NoError(t, err)
+	defer server.Close()
+
+	// 创建客户端
+	client, err := helper.StartClient(tr, server.Listener.Addr().String())
+	require.NoError(t, err)
+	defer client.Close()
+
+	// 修改客户端处理器的序列化器
+	client.Processor.opts.Serializer = customSerializer
 
 	// 发送JSON数据
 	testData := map[string]interface{}{
 		"name": "test",
 		"age":  25,
 	}
-	err = clientProcessor.Send("json_test", testData)
+	err = client.Processor.Send("json_test", testData)
 	require.NoError(t, err)
 
 	// 验证数据接收
@@ -758,39 +709,133 @@ func testCustomSerializer(t *testing.T, tr transport.Transport) {
 	case receivedData := <-messageReceived:
 		assert.Equal(t, testData["name"], receivedData["name"])
 		assert.Equal(t, float64(25), receivedData["age"]) // JSON数字解析为float64
-	case <-time.After(5 * time.Second):
+	case <-time.After(2 * time.Second): // 减少超时时间
 		t.Fatal("Timeout waiting for message")
 	}
-
-	wg.Wait()
 }
 
 // testProcessorLifecycle 测试处理器生命周期
 func testProcessorLifecycle(t *testing.T, tr transport.Transport) {
-	listener, err := tr.Listen("127.0.0.1:0")
+	helper := NewTestHelper()
+
+	// 创建服务端
+	server, err := helper.StartServer(tr, nil)
 	require.NoError(t, err)
-	defer listener.Close()
+	defer server.Close()
 
-	go func() {
-		conn, _ := listener.Accept()
-		if conn != nil {
-			defer conn.Close()
-			processor := NewProcessor(conn, ProcessorOptions{
-				Logger: log.NewDefaultLogger(),
-			})
-
-			// 测试基本方法
-			assert.NotNil(t, processor.Logger())
-			assert.NotNil(t, processor.Serializer())
-			
-			// 测试关闭
-			err := processor.Close()
-			assert.NoError(t, err)
-		}
-	}()
-
-	time.Sleep(100 * time.Millisecond)
-	conn, err := tr.Dial(listener.Addr().String())
+	// 创建客户端
+	client, err := helper.StartClient(tr, server.Listener.Addr().String())
 	require.NoError(t, err)
-	conn.Close()
+	defer client.Close()
+
+	// 测试基本方法
+	assert.NotNil(t, server.Processor.Logger())
+	assert.NotNil(t, server.Processor.Serializer())
+
+	// 测试关闭
+	err = server.Processor.Close()
+	assert.NoError(t, err)
+}
+
+// testEmptyMessage 测试空消息处理
+func testEmptyMessage(t *testing.T, tr transport.Transport) {
+	helper := NewTestHelper()
+
+	// 创建服务端
+	messageReceived := make(chan bool, 1)
+	server, err := helper.StartServer(tr, func(p *Processor) {
+		p.RegisterHandler("empty_test", func(ctx Context) error {
+			// 检查是否为空消息
+			var msg string
+			if err := ctx.Bind(&msg); err != nil {
+				return err
+			}
+			// 空字符串消息
+			if msg == "" {
+				messageReceived <- true
+			}
+			return nil
+		})
+	})
+	require.NoError(t, err)
+	defer server.Close()
+
+	// 创建客户端
+	client, err := helper.StartClient(tr, server.Listener.Addr().String())
+	require.NoError(t, err)
+	defer client.Close()
+
+	// 发送空消息
+	err = client.Processor.Send("empty_test", "")
+	require.NoError(t, err)
+
+	// 验证空消息被正确处理
+	select {
+	case <-messageReceived:
+		// 正常处理
+	case <-time.After(2 * time.Second): // 减少超时时间
+		t.Fatal("Timeout waiting for empty message")
+	}
+}
+
+// testLargeMessage 测试大消息处理
+func testLargeMessage(t *testing.T, tr transport.Transport) {
+	helper := NewTestHelper()
+
+	// 创建服务端
+	messageReceived := make(chan int, 1)
+	server, err := helper.StartServer(tr, func(p *Processor) {
+		p.RegisterHandler("large_test", func(ctx Context) error {
+			var msg string
+			if err := ctx.Bind(&msg); err != nil {
+				return err
+			}
+			// 返回消息长度
+			messageReceived <- len(msg)
+			return nil
+		})
+	})
+	require.NoError(t, err)
+	defer server.Close()
+
+	// 创建客户端
+	client, err := helper.StartClient(tr, server.Listener.Addr().String())
+	require.NoError(t, err)
+	defer client.Close()
+
+	// 发送大消息 (10KB)
+	largeMessage := strings.Repeat("a", 10*1024)
+	err = client.Processor.Send("large_test", largeMessage)
+	require.NoError(t, err)
+
+	// 验证大消息被正确处理
+	select {
+	case length := <-messageReceived:
+		assert.Equal(t, len(largeMessage), length)
+	case <-time.After(2 * time.Second): // 减少超时时间
+		t.Fatal("Timeout waiting for large message")
+	}
+}
+
+// testUnregisteredMessageType 测试未注册的消息类型
+func testUnregisteredMessageType(t *testing.T, tr transport.Transport) {
+	helper := NewTestHelper()
+
+	// 创建服务端（不注册任何处理器）
+	server, err := helper.StartServer(tr, nil)
+	require.NoError(t, err)
+	defer server.Close()
+
+	// 创建客户端
+	client, err := helper.StartClient(tr, server.Listener.Addr().String())
+	require.NoError(t, err)
+	defer client.Close()
+
+	// 发送未注册的消息类型
+	err = client.Processor.Send("unregistered_type", "test message")
+	require.NoError(t, err)
+
+	// 服务器应该不会崩溃，消息会被忽略
+	// 这里我们只是验证发送不报错，实际行为取决于实现
+	time.Sleep(50 * time.Millisecond) // 减少等待时间
 }
