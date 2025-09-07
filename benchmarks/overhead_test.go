@@ -27,19 +27,19 @@ func TestProtocolOverhead_V0_0_2(t *testing.T) {
 			name:             "Small_Message",
 			msgType:          "test",
 			payload:          "hello",
-			expectedOverhead: 15 + len("test"), // 15字节固定头部 + 消息类型长度
+			expectedOverhead: 21, // Balanced协议固定头部: 4(Magic) + 1(Version+Flags+Length) + 8(RequestID) + 4(TypeID) + 4(Length) = 21字节
 		},
 		{
 			name:             "Medium_Message",
 			msgType:          "benchmark",
 			payload:          map[string]int{"value": 123},
-			expectedOverhead: 15 + len("benchmark"),
+			expectedOverhead: 21, // Balanced协议固定头部
 		},
 		{
 			name:             "Long_Message_Type",
 			msgType:          "very_long_message_type_name_for_testing_protocol_overhead",
 			payload:          "data",
-			expectedOverhead: 15 + len("very_long_message_type_name_for_testing_protocol_overhead"),
+			expectedOverhead: 21, // Balanced协议固定头部，TypeID固定4字节
 		},
 		{
 			name:    "Complex_Payload",
@@ -50,7 +50,7 @@ func TestProtocolOverhead_V0_0_2(t *testing.T) {
 				"data": []int{1, 2, 3, 4, 5},
 				"meta": map[string]string{"version": "v0.0.2"},
 			},
-			expectedOverhead: 15 + len("complex"),
+			expectedOverhead: 21, // Balanced协议固定头部
 		},
 	}
 
@@ -104,11 +104,11 @@ func TestProtocolOverhead_Comparison(t *testing.T) {
 	}
 
 	msgType := "size_test"
-	expectedHeaderSize := 15 + len(msgType)
+	expectedHeaderSize := 21 // Balanced协议固定头部
 
-	t.Logf("协议开销对比分析 (v0.0.2):")
-	t.Logf("固定头部开销: %d字节 (15字节基础 + %d字节消息类型)",
-		expectedHeaderSize, len(msgType))
+	t.Logf("协议开销对比分析 (Balanced协议):")
+	t.Logf("固定头部开销: %d字节 (4字节Magic + 1字节Version+Flags+Length + 8字节RequestID + 4字节TypeID + 4字节Length)",
+		expectedHeaderSize)
 	t.Logf("%-12s | %-8s | %-8s | %-8s | %-10s",
 		"消息大小", "总大小", "负载", "头部", "开销比例")
 	t.Logf("%s", "-------------|----------|----------|----------|----------")
@@ -166,9 +166,9 @@ func TestProtocolOverhead_MessageTypeLength(t *testing.T) {
 	}
 
 	payload := "test"
-	expectedBaseOverhead := 15 // 固定头部大小
+	expectedBaseOverhead := 21 // Balanced协议固定头部大小
 
-	t.Logf("消息类型长度对协议开销的影响:")
+	t.Logf("消息类型长度对协议开销的影响 (Balanced协议):")
 	t.Logf("%-8s | %-8s | %-8s | %-12s",
 		"类型长度", "总开销", "基础开销", "类型开销")
 	t.Logf("%s", "---------|----------|----------|------------")
@@ -190,9 +190,9 @@ func TestProtocolOverhead_MessageTypeLength(t *testing.T) {
 		totalOverhead := len(encoded) - len(payloadData)
 		typeOverhead := totalOverhead - expectedBaseOverhead
 
-		// 验证消息类型开销
-		assert.Equal(t, len(mt.msgType), typeOverhead,
-			"消息类型开销应该等于消息类型字节长度")
+		// Balanced协议中，TypeID固定为4字节，不随消息类型字符串长度变化
+		assert.Equal(t, 0, typeOverhead,
+			"Balanced协议中TypeID固定为4字节，不随消息类型字符串长度变化")
 
 		t.Logf("%-8d | %-8d | %-8d | %-12d",
 			len(mt.msgType), totalOverhead, expectedBaseOverhead, typeOverhead)
@@ -201,7 +201,12 @@ func TestProtocolOverhead_MessageTypeLength(t *testing.T) {
 
 // TestProtocolOverhead_FlagImpact 测试标志位对开销的影响
 func TestProtocolOverhead_FlagImpact(t *testing.T) {
-	c := codec.NewBalancedCodec(serializer.DefaultSerializer)
+	// 创建带加密的编解码器
+	key := []byte("1234567890123456") // 16字节密钥
+	encryptor, err := codec.NewAESEncryptor(key)
+	assert.NoError(t, err)
+
+	c := codec.NewBalancedCodecWithEncryption(serializer.DefaultSerializer, encryptor)
 
 	msgType := "flag_test"
 	payload := "test data"
@@ -229,11 +234,19 @@ func TestProtocolOverhead_FlagImpact(t *testing.T) {
 		totalSize := len(encoded)
 		payloadSize := len(payloadData)
 		overhead := totalSize - payloadSize
-		expectedOverhead := 15 + len(msgType) // 固定开销
 
-		// 标志位不影响消息大小，只影响处理方式
+		// 根据标志位计算期望开销
+		var expectedOverhead int
+		if ft.flags&codec.BalancedFlagEncrypted != 0 {
+			// 加密会增加 AES-GCM 的 nonce(12字节) + tag(16字节) = 28字节
+			expectedOverhead = 21 + 28 // 基础开销 + 加密开销
+		} else {
+			expectedOverhead = 21 // Balanced协议固定开销
+		}
+
+		// 验证开销
 		assert.Equal(t, expectedOverhead, overhead,
-			"标志位不应影响协议开销")
+			"标志位开销不匹配: %s", ft.name)
 
 		t.Logf("  %s (0x%02x): 总大小=%d字节, 开销=%d字节",
 			ft.name, ft.flags, totalSize, overhead)
@@ -267,13 +280,14 @@ func TestProtocolVersion_Validation(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, len(encoded) > 0)
 
-	// 验证版本字段
-	version := encoded[0]
+	// 验证版本字段 (Balanced协议中版本在字节4的高4位)
+	versionByte := encoded[4]
+	version := (versionByte >> 4) & 0x0F
 	assert.Equal(t, uint8(codec.BalancedVersion), version,
 		"协议版本应该为 %d", codec.BalancedVersion)
 
 	t.Logf("协议版本验证:")
-	t.Logf("  当前版本: v0.0.2")
+	t.Logf("  当前版本: Balanced协议")
 	t.Logf("  协议版本号: %d", version)
-	t.Logf("  版本字段位置: 字节0")
+	t.Logf("  版本字段位置: 字节4的高4位")
 }

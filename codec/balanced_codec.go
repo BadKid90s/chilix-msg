@@ -1,3 +1,44 @@
+// Package codec 提供高性能的消息编解码器实现
+//
+// BalancedCodec 实现了 CHILIX 平衡协议，这是一个优化的二进制协议格式：
+//
+// 协议格式 (Balanced Protocol v2):
+// ┌─────────────────────────────────────────────────────────────────┐
+// │                     Magic Number (32bit)                        │  // "CHPM" (0x4348504D)
+// ├─────────────────────────────────────────────────────────────────┤
+// │ Version(4bit) │ Flags(4bit)   │        Total Length (24bit)   │  // 版本+标志+总长度
+// ├─────────────────────────────────────────────────────────────────┤
+// │                        Request ID (64bit)                       │  // 请求ID
+// ├─────────────────────────────────────────────────────────────────┤
+// │ Type ID (32bit)                                                 │  // 消息类型ID
+// ├─────────────────────────────────────────────────────────────────┤
+// │ Extension TLV (变长, 可选，如果FlagExtended设置)                 │  // 扩展区
+// │  - Type(8bit) + Length(16bit) + Value(变长)                    │
+// │  - 可多个TLV，Length=0表示结束                                   │
+// ├─────────────────────────────────────────────────────────────────┤
+// │                     Payload (变长)                              │  // 消息负载
+// └─────────────────────────────────────────────────────────────────┘
+//
+// 字段说明:
+// - Magic Number: 固定值 0x4348504D ("CHPM")，用于协议识别
+// - Version: 协议版本号，当前为 2 (4bit)
+// - Flags: 标志位 (4bit)
+//   - Bit 0: BalancedFlagCompressed (0x1) - 压缩标志
+//   - Bit 1: BalancedFlagEncrypted (0x2) - 加密标志
+//   - Bit 3: BalancedFlagExtended (0x8) - 扩展区标志
+//
+// - Total Length: 整个消息的总长度 (24bit, 最大16MB)
+// - Request ID: 请求标识符 (64bit)
+// - Type ID: 消息类型标识符 (32bit)
+// - Extension TLV: 可选的扩展字段，支持多个TLV结构
+// - Payload: 实际的消息数据
+//
+// 特性:
+// - 高性能: 固定头部结构，快速解析
+// - 可扩展: 支持TLV扩展字段
+// - 安全: 支持AES-GCM加密
+// - 压缩: 预留压缩标志位
+// - 类型优化: 32位类型ID，提升匹配性能
 package codec
 
 import (
@@ -21,26 +62,69 @@ var (
 	ErrInvalidKey       = errors.New("invalid encryption key")
 )
 
+// BalancedCodec 协议常量定义
 const (
-	MagicNumber        = 0x4348504D       // "CHPM" (CHILIX Protocol Message 首字母) ASCII (32bit)
-	MaxMessageSize     = 16 * 1024 * 1024 // 16 * 1024 * 1024 16MB
-	BalancedVersion    = 2                // 新协议版本 (4bit)
-	BalancedHeaderSize = 21               // 新协议基础头部大小 (Magic + Version/Flags/Length + RequestID + TypeID)
+	// MagicNumber 协议魔数，用于识别 CHILIX 协议消息
+	// 值: 0x4348504D，对应 ASCII 字符串 "CHPM" (CHILIX Protocol Message)
+	// 位置: 消息头部前4字节
+	MagicNumber = 0x4348504D
+
+	// MaxMessageSize 最大消息大小限制 (16MB)
+	// 用于防止内存耗尽攻击，确保系统稳定性
+	MaxMessageSize = 16 * 1024 * 1024
+
+	// BalancedVersion 平衡协议版本号
+	// 当前版本: 2 (4bit)
+	// 位置: 第5字节的高4位
+	BalancedVersion = 2
+
+	// BalancedHeaderSize 平衡协议基础头部大小
+	// 包含: Magic(4) + Version/Flags/Length(4) + RequestID(8) + TypeID(4) = 20字节
+	// 注意: 实际头部可能包含扩展TLV，此值为最小头部大小
+	BalancedHeaderSize = 21
 )
 
-// 新协议标志位定义 (4bit)
+// 平衡协议标志位定义 (4bit)
+// 位置: 第5字节的低4位
 const (
-	BalancedFlagNone       = 0x0 // 无特殊标志
-	BalancedFlagCompressed = 0x1 // 压缩
-	BalancedFlagEncrypted  = 0x2 // 加密
-	BalancedFlagExtended   = 0x8 // 有扩展区
+	// BalancedFlagNone 无特殊标志
+	BalancedFlagNone = 0x0
+
+	// BalancedFlagCompressed 压缩标志
+	// 当设置时，Payload 数据已压缩
+	BalancedFlagCompressed = 0x1
+
+	// BalancedFlagEncrypted 加密标志
+	// 当设置时，Payload 数据已使用 AES-GCM 加密
+	BalancedFlagEncrypted = 0x2
+
+	// BalancedFlagExtended 扩展区标志
+	// 当设置时，消息包含 TLV 扩展字段
+	BalancedFlagExtended = 0x8
 )
 
-// TLV TLV结构
+// TLV 扩展字段的 Type-Length-Value 结构
+// 用于在消息中携带额外的元数据或配置信息
+//
+// 格式:
+// ┌─────────────┬─────────────┬─────────────┐
+// │ Type (8bit) │ Length(16bit)│ Value(变长) │
+// └─────────────┴─────────────┴─────────────┘
+//
+// 字段说明:
+// - Type: 扩展字段类型标识符 (8bit)
+// - Length: Value 字段的字节长度 (16bit, 大端序)
+// - Value: 实际的扩展数据 (Length 字节)
+//
+// 使用场景:
+// - 优先级设置
+// - 路由信息
+// - 自定义元数据
+// - 协议扩展
 type TLV struct {
-	Type   uint8
-	Length uint16
-	Value  []byte
+	Type   uint8  // 扩展字段类型 (0-255)
+	Length uint16 // 数据长度 (0-65535 字节)
+	Value  []byte // 扩展数据内容
 }
 
 // Encryptor 加密器接口

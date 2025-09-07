@@ -23,7 +23,7 @@ type processor struct {
 	codec        codec.Codec
 	handlers     map[string]Handler
 	middlewares  []Middleware
-	typeRegistry *TypeRegistry
+	typeRegistry *Registry
 	requestMgr   *RequestManager
 	config       ProcessorConfig
 	ctx          context.Context
@@ -50,7 +50,7 @@ func newProcessor(conn transport.Connection, config ProcessorConfig) *processor 
 		codec:        codec.NewBalancedCodec(config.Serializer),
 		handlers:     make(map[string]Handler),
 		middlewares:  make([]Middleware, 0),
-		typeRegistry: NewTypeRegistry(),
+		typeRegistry: NewRegistry(),
 		requestMgr:   NewRequestManager(config.RequestTimeout),
 		config:       config,
 		ctx:          ctx,

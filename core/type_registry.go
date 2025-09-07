@@ -8,25 +8,25 @@ import (
 
 var ErrTypeConflict = errors.New("type hash conflict")
 
-// TypeRegistry 类型注册器，将string转换为uint32 ID
-type TypeRegistry struct {
+// Registry 类型注册器，将string转换为uint32 ID
+type Registry struct {
 	nameToID map[string]uint32 // string -> int ID (hash)
 	idToName map[uint32]string // int ID -> string
 	mutex    sync.RWMutex
 }
 
-// NewTypeRegistry 创建新的类型注册器
-func NewTypeRegistry() *TypeRegistry {
-	return &TypeRegistry{
+// NewRegistry 创建新的类型注册器
+func NewRegistry() *Registry {
+	return &Registry{
 		nameToID: make(map[string]uint32),
 		idToName: make(map[uint32]string),
 	}
 }
 
 // Register 将string转换为uint32 ID
-func (tr *TypeRegistry) Register(msgType string) (uint32, error) {
-	tr.mutex.Lock()
-	defer tr.mutex.Unlock()
+func (r *Registry) Register(msgType string) (uint32, error) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
 
 	// 计算哈希
 	h := fnv.New32a()
@@ -37,49 +37,49 @@ func (tr *TypeRegistry) Register(msgType string) (uint32, error) {
 	hash := h.Sum32()
 
 	// 检查冲突
-	if existing, exists := tr.idToName[hash]; exists && existing != msgType {
+	if existing, exists := r.idToName[hash]; exists && existing != msgType {
 		return 0, ErrTypeConflict // 冲突错误
 	}
 
 	// 注册
-	tr.nameToID[msgType] = hash
-	tr.idToName[hash] = msgType
+	r.nameToID[msgType] = hash
+	r.idToName[hash] = msgType
 	return hash, nil
 }
 
 // GetName 根据ID获取string
-func (tr *TypeRegistry) GetName(id uint32) (string, bool) {
-	tr.mutex.RLock()
-	defer tr.mutex.RUnlock()
-	name, exists := tr.idToName[id]
+func (r *Registry) GetName(id uint32) (string, bool) {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	name, exists := r.idToName[id]
 	return name, exists
 }
 
 // GetID 根据string获取ID
-func (tr *TypeRegistry) GetID(msgType string) (uint32, bool) {
-	tr.mutex.RLock()
-	defer tr.mutex.RUnlock()
-	id, exists := tr.nameToID[msgType]
+func (r *Registry) GetID(msgType string) (uint32, bool) {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	id, exists := r.nameToID[msgType]
 	return id, exists
 }
 
 // GetAllTypes 获取所有注册的类型（用于调试）
-func (tr *TypeRegistry) GetAllTypes() map[string]uint32 {
-	tr.mutex.RLock()
-	defer tr.mutex.RUnlock()
+func (r *Registry) GetAllTypes() map[string]uint32 {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
 
 	// 返回副本
 	types := make(map[string]uint32)
-	for k, v := range tr.nameToID {
+	for k, v := range r.nameToID {
 		types[k] = v
 	}
 	return types
 }
 
 // Clear 清空所有注册的类型（用于测试）
-func (tr *TypeRegistry) Clear() {
-	tr.mutex.Lock()
-	defer tr.mutex.Unlock()
-	tr.nameToID = make(map[string]uint32)
-	tr.idToName = make(map[uint32]string)
+func (r *Registry) Clear() {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	r.nameToID = make(map[string]uint32)
+	r.idToName = make(map[uint32]string)
 }
