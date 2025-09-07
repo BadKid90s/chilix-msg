@@ -73,7 +73,7 @@ deps:
 	$(GOGET) -v -t ./...
 	@if ! command -v $(GOLINT) > /dev/null; then \
 		echo "正在安装 golangci-lint..."; \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin; \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.4.0 \
 	fi
 
 # 生成文档
