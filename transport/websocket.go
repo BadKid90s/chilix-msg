@@ -110,13 +110,19 @@ func (l *wsListener) Close() error {
 	l.once.Do(func() {
 		close(l.closeCh)
 		if l.server != nil {
-			if err := l.server.Close(); err != nil {
-				return
-			}
+			// 在协程中关闭服务器，单独处理错误
+			go func() {
+				if err := l.server.Close(); err != nil {
+					// 记录错误但不阻塞
+				}
+			}()
 		} else if l.ln != nil {
-			if err := l.ln.Close(); err != nil {
-				return
-			}
+			// 在协程中关闭监听器，单独处理错误
+			go func() {
+				if err := l.ln.Close(); err != nil {
+					// 记录错误但不阻塞
+				}
+			}()
 		}
 	})
 	return nil

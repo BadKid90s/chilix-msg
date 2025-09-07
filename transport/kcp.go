@@ -13,10 +13,12 @@ type kcpListener struct {
 }
 
 func (l *kcpListener) Accept() (Connection, error) {
-	conn, err := l.Listener.Accept()
+	conn, err := l.Listener.AcceptKCP()
 	if err != nil {
 		return nil, err
 	}
+	// 为接受的连接设置优化参数
+	conn.SetNoDelay(1, 10, 2, 1)
 	return conn, nil
 }
 
@@ -40,7 +42,7 @@ func NewKCPTransport() Transport {
 }
 
 func (t *kcpTransport) Listen(address string) (Listener, error) {
-	l, err := kcp.ListenWithOptions(address, t.block, 10, 3)
+	l, err := kcp.ListenWithOptions(address, t.block, 0, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -48,5 +50,11 @@ func (t *kcpTransport) Listen(address string) (Listener, error) {
 }
 
 func (t *kcpTransport) Dial(address string) (Connection, error) {
-	return kcp.DialWithOptions(address, t.block, 10, 3)
+	conn, err := kcp.DialWithOptions(address, t.block, 0, 0)
+	if err != nil {
+		return nil, err
+	}
+	// 使用与监听端相同的优化参数
+	conn.SetNoDelay(1, 10, 2, 1)
+	return conn, nil
 }

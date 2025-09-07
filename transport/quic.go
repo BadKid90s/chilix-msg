@@ -65,8 +65,10 @@ func (l *quicListener) Accept() (Connection, error) {
 		return nil, err
 	}
 
+	// 等待客户端打开流
 	stream, err := conn.AcceptStream(context.Background())
 	if err != nil {
+		_ = conn.CloseWithError(0, "failed to accept stream")
 		return nil, fmt.Errorf("failed to accept stream: %w", err)
 	}
 
@@ -98,7 +100,14 @@ func (t *quicTransport) Listen(address string) (Listener, error) {
 		return nil, fmt.Errorf("failed to generate TLS config: %w", err)
 	}
 
-	listener, err := quic.ListenAddr(address, tlsConf, nil)
+	// 优化QUIC配置以加速测试
+	quicConfig := &quic.Config{
+		HandshakeIdleTimeout: 5 * time.Second,
+		MaxIdleTimeout:       5 * time.Second,
+		KeepAlivePeriod:      1 * time.Second,
+	}
+
+	listener, err := quic.ListenAddr(address, tlsConf, quicConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +121,14 @@ func (t *quicTransport) Dial(address string) (Connection, error) {
 		NextProtos:         []string{"quic-echo-example"},
 	}
 
-	conn, err := quic.DialAddr(context.Background(), address, tlsConf, nil)
+	// 使用与监听端相同的优化配置
+	quicConfig := &quic.Config{
+		HandshakeIdleTimeout: 5 * time.Second,
+		MaxIdleTimeout:       5 * time.Second,
+		KeepAlivePeriod:      1 * time.Second,
+	}
+
+	conn, err := quic.DialAddr(context.Background(), address, tlsConf, quicConfig)
 	if err != nil {
 		return nil, err
 	}

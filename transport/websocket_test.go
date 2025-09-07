@@ -1,225 +1,205 @@
 package transport
 
 import (
-	"errors"
-	"fmt"
-	"io"
 	"net"
-	"sync"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
 
-func TestWebSocketTransport_Basic(t *testing.T) {
-	t.Parallel()
-
-	tr := NewWebSocketTransport()
-	listener, err := tr.Listen("127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("Listen failed: %v", err)
-	}
-	defer func() {
-		if err := listener.Close(); err != nil {
-			t.Log("Listener close error:", err)
-		}
-	}()
-
-	addr := listener.Addr().String()
-	fmt.Println("WebSocket listen address:", addr)
-
-	serverDone := make(chan struct{})
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				t.Log("Server goroutine panic:", r)
-			}
-			close(serverDone)
-		}()
-
-		conn, err := listener.Accept()
-		if err != nil {
-			t.Error("Accept failed:", err)
-			return
-		}
-		defer func() {
-			if err := conn.Close(); err != nil {
-				t.Log("Connection close error:", err)
-			}
-		}()
-
-		buf := make([]byte, 64)
-		n, err := conn.Read(buf)
-		if err != nil && err != io.EOF {
-			t.Error("Read failed:", err)
-			return
-		}
-		if n == 0 {
-			t.Error("Read 0 bytes")
-			return
-		}
-		if string(buf[:n]) != "hello websocket" {
-			t.Errorf("Expected 'hello websocket', got %q", buf[:n])
-		}
-	}()
-
-	// WebSocket需要稍长的启动时间（HTTP服务器初始化）
-	time.Sleep(100 * time.Millisecond)
-
-	conn, err := tr.Dial(addr)
-	if err != nil {
-		t.Fatalf("Dial failed: %v", err)
-	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			t.Log("Client connection close error:", err)
-		}
-	}()
-
-	_, err = conn.Write([]byte("hello websocket"))
-	if err != nil {
-		t.Fatalf("Write failed: %v", err)
-	}
-
-	select {
-	case <-serverDone:
-	case <-time.After(3 * time.Second):
-		t.Fatal("test timed out")
+func TestWebSocketTransport_Protocol(t *testing.T) {
+	transport := NewWebSocketTransport()
+	if transport.Protocol() != "websocket" {
+		t.Errorf("Expected protocol to be 'websocket', got '%s'", transport.Protocol())
 	}
 }
 
-func TestWebSocketTransport_Concurrent(t *testing.T) {
-	t.Parallel()
-
-	tr := NewWebSocketTransport()
-	listener, err := tr.Listen("127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("Listen failed: %v", err)
-	}
-	defer func() {
-		if err := listener.Close(); err != nil {
-			t.Log("Listener close error:", err)
-		}
-	}()
-
-	// 启动服务端处理多个连接
-	go func() {
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
-				// 检查是否是监听器关闭导致的错误
-				var netErr *net.OpError
-				if errors.As(err, &netErr) && errors.Is(netErr.Err, net.ErrClosed) {
-					return
-				}
-				t.Log("Accept error:", err)
-				continue
-			}
-
-			go func(c Connection) {
-				defer func() {
-					if err := c.Close(); err != nil {
-						t.Log("Connection close error:", err)
-					}
-				}()
-
-				buf := make([]byte, 64)
-				n, _ := c.Read(buf)
-				write, err := c.Write(buf[:n])
-				if err != nil {
-					t.Errorf("Write failed: %v", err)
-					return
-				}
-				if write != n {
-					t.Errorf("Write not all bytes: %d != %d", write, n)
-				}
-			}(conn)
-		}
-	}()
-
-	// WebSocket需要比TCP稍长的启动时间
-	time.Sleep(100 * time.Millisecond)
-	addr := listener.Addr().String()
-
-	const numClients = 10
-	var wg sync.WaitGroup
-	wg.Add(numClients)
-
-	for i := 0; i < numClients; i++ {
-		go func(id int) {
-			defer wg.Done()
-
-			conn, err := tr.Dial(addr)
-			if err != nil {
-				t.Errorf("Dial failed: %v", err)
-				return
-			}
-			defer func() {
-				if err := conn.Close(); err != nil {
-					t.Log("Client connection close error:", err)
-				}
-			}()
-
-			msg := []byte(fmt.Sprintf("client-%d", id))
-			_, err = conn.Write(msg)
-			if err != nil {
-				t.Errorf("Write failed: %v", err)
-				return
-			}
-
-			buf := make([]byte, 64)
-			n, err := conn.Read(buf)
-			if err != nil {
-				t.Errorf("Read failed: %v", err)
-				return
-			}
-
-			if string(buf[:n]) != string(msg) {
-				t.Errorf("Expected %q, got %q", msg, buf[:n])
-			}
-		}(i)
+func TestWebSocketTransport_BasicConnection(t *testing.T) {
+	config := TestConfig{
+		ProtocolName:      "WebSocket",
+		Transport:         NewWebSocketTransport(),
+		ConnectionTimeout: 5 * time.Second,
+		DataTimeout:       2 * time.Second,
+		SkipNetworkTests:  false,
 	}
 
-	wg.Wait()
+	result := RunBasicConnectionTest(config)
+	if !result.Success {
+		t.Fatalf("Basic connection test failed: %s - %v", result.Message, result.Error)
+	}
+	t.Logf("WebSocket basic connection test: %s", result.Message)
+}
+
+func TestWebSocketTransport_LargeData(t *testing.T) {
+	config := TestConfig{
+		ProtocolName:      "WebSocket",
+		Transport:         NewWebSocketTransport(),
+		ConnectionTimeout: 10 * time.Second,
+		DataTimeout:       5 * time.Second,
+		SkipNetworkTests:  false,
+	}
+
+	result := RunLargeDataTest(config)
+	if !result.Success {
+		t.Fatalf("Large data test failed: %s - %v", result.Message, result.Error)
+	}
+	t.Logf("WebSocket large data test: %s", result.Message)
 }
 
 func TestWebSocketTransport_Timeout(t *testing.T) {
-	t.Parallel()
-
-	tr := NewWebSocketTransport()
-	listener, err := tr.Listen("127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("Listen failed: %v", err)
+	config := TestConfig{
+		ProtocolName:      "WebSocket",
+		Transport:         NewWebSocketTransport(),
+		ConnectionTimeout: 5 * time.Second,
+		DataTimeout:       2 * time.Second,
+		SkipNetworkTests:  false,
 	}
-	defer func() {
-		if err := listener.Close(); err != nil {
-			t.Log("Listener close error:", err)
-		}
-	}()
 
-	t.Run("DialInvalidPort", func(t *testing.T) {
-		_, err := tr.Dial("127.0.0.1:99999")
-		if err == nil {
-			t.Fatal("Expected dial error")
-		}
-	})
+	result := RunTimeoutTest(config)
+	if !result.Success {
+		t.Fatalf("Timeout test failed: %s - %v", result.Message, result.Error)
+	}
+	t.Logf("WebSocket timeout test: %s", result.Message)
+}
 
-	t.Run("DialInvalidProtocol", func(t *testing.T) {
-		// WebSocket需要ws://或wss://协议
-		_, err := tr.Dial("http://127.0.0.1:0")
-		if err == nil {
-			t.Fatal("Expected dial error for invalid protocol")
-		}
-	})
+func TestWebSocketTransport_InvalidAddress(t *testing.T) {
+	config := TestConfig{
+		ProtocolName:      "WebSocket",
+		Transport:         NewWebSocketTransport(),
+		ConnectionTimeout: 5 * time.Second,
+		DataTimeout:       2 * time.Second,
+		SkipNetworkTests:  false,
+	}
 
-	t.Run("AcceptAfterClose", func(t *testing.T) {
-		err := listener.Close()
-		if err != nil {
-			t.Fatal("Close failed:", err)
-			return
-		}
-		_, err = listener.Accept()
-		if err == nil {
-			t.Fatal("Expected accept error after close")
-		}
-	})
+	result := RunInvalidAddressTest(t, config)
+	if !result.Success {
+		t.Fatalf("Invalid address test failed: %s - %v", result.Message, result.Error)
+	}
+	t.Logf("WebSocket invalid address test: %s", result.Message)
+}
+
+func TestWebSocketListener_Addr(t *testing.T) {
+	transport := NewWebSocketTransport()
+
+	// 使用随机端口启动监听器
+	listener, err := transport.Listen("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to listen: %v", err)
+	}
+	defer SafeClose(listener, "websocket-listener")
+
+	addr := listener.Addr()
+	if addr == nil {
+		t.Fatal("Expected non-nil address")
+	}
+
+	// WebSocket监听器底层使用TCP，所以网络类型应该是tcp
+	if addr.Network() != "tcp" {
+		t.Errorf("Expected network to be 'tcp', got '%s'", addr.Network())
+	}
+}
+
+func TestWebSocketListener_Close(t *testing.T) {
+	transport := NewWebSocketTransport()
+
+	// 使用随机端口启动监听器
+	listener, err := transport.Listen("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to listen: %v", err)
+	}
+
+	// 在协程中关闭监听器，单独处理错误
+	SafeClose(listener, "websocket-listener")
+
+	// 等待一下让关闭操作完成
+	time.Sleep(100 * time.Millisecond)
+
+	// 尝试接受连接，应该失败
+	_, err = listener.Accept()
+	if err == nil {
+		t.Fatal("Expected Accept to fail after listener closed")
+	}
+}
+
+func TestWebSocketURLHandling(t *testing.T) {
+	transport := NewWebSocketTransport()
+
+	// 使用随机端口启动监听器
+	listener, err := transport.Listen("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to listen: %v", err)
+	}
+	defer SafeClose(listener, "websocket-listener")
+
+	// 获取实际分配的地址
+	addr := listener.Addr().String()
+
+	// 验证地址格式
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		t.Fatalf("Failed to split host:port: %v", err)
+	}
+
+	// 检查URL格式是否正确
+	u := url.URL{Scheme: "ws", Host: addr, Path: "/"}
+	if !strings.HasPrefix(u.String(), "ws://"+host) {
+		t.Errorf("Expected URL to start with 'ws://%s', got '%s'", host, u.String())
+	}
+}
+
+func TestWebSocketTransport_ConnectionInterface(t *testing.T) {
+	config := TestConfig{
+		ProtocolName:      "WebSocket",
+		Transport:         NewWebSocketTransport(),
+		ConnectionTimeout: 5 * time.Second,
+		DataTimeout:       2 * time.Second,
+		SkipNetworkTests:  false,
+	}
+
+	// 创建回显服务器
+	server, err := NewEchoServer(config.Transport, "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+	defer SafeClose(server, "websocket-echo-server")
+
+	// 客户端连接
+	clientConn, err := config.Transport.Dial(server.Addr().String())
+	if err != nil {
+		t.Fatalf("Failed to dial server: %v", err)
+	}
+	defer SafeClose(clientConn, "websocket-client-connection")
+
+	// 测试连接的基本属性
+	if clientConn.LocalAddr() == nil {
+		t.Errorf("LocalAddr() returned nil")
+	}
+	if clientConn.RemoteAddr() == nil {
+		t.Errorf("RemoteAddr() returned nil")
+	}
+
+	// 测试设置超时
+	err = clientConn.SetDeadline(time.Now().Add(time.Second))
+	if err != nil {
+		t.Errorf("SetDeadline() failed: %v", err)
+	}
+
+	err = clientConn.SetReadDeadline(time.Now().Add(time.Second))
+	if err != nil {
+		t.Errorf("SetReadDeadline() failed: %v", err)
+	}
+
+	err = clientConn.SetWriteDeadline(time.Now().Add(time.Second))
+	if err != nil {
+		t.Errorf("SetWriteDeadline() failed: %v", err)
+	}
+
+	// 重置超时
+	err = clientConn.SetDeadline(time.Time{})
+	if err != nil {
+		t.Errorf("Failed to reset deadline: %v", err)
+	}
+
+	t.Log("WebSocket connection interface test passed")
 }

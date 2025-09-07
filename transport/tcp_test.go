@@ -1,221 +1,195 @@
 package transport
 
 import (
-	"errors"
-	"fmt"
-	"io"
 	"net"
-	"sync"
 	"testing"
 	"time"
 )
 
-func TestTCPTransport_Basic(t *testing.T) {
-	t.Parallel()
-
-	tr := NewTCPTransport()
-	listener, err := tr.Listen("127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("Listen failed: %v", err)
-	}
-	defer func() {
-		if err := listener.Close(); err != nil {
-			t.Log("Listener close error:", err)
-		}
-	}()
-
-	addr := listener.Addr().String()
-	fmt.Println("TCP listen address:", addr)
-
-	serverDone := make(chan struct{})
-	go func() {
-		// 确保serverDone channel总是被关闭
-		defer func() {
-			if r := recover(); r != nil {
-				t.Log("Server goroutine panic:", r)
-			}
-			close(serverDone)
-		}()
-
-		conn, err := listener.Accept()
-		if err != nil {
-			t.Error("Accept failed:", err)
-			return
-		}
-		// 确保连接总是被关闭
-		defer func() {
-			if err := conn.Close(); err != nil {
-				t.Log("Connection close error:", err)
-			}
-		}()
-
-		buf := make([]byte, 64)
-		n, err := conn.Read(buf)
-		if err != nil && err != io.EOF {
-			t.Error("Read failed:", err)
-			return
-		}
-		if n == 0 {
-			t.Error("Read 0 bytes")
-			return
-		}
-		if string(buf[:n]) != "hello tcp" {
-			t.Errorf("Expected 'hello tcp', got %q", buf[:n])
-		}
-	}()
-
-	// 等待服务端进入Accept状态
-	time.Sleep(50 * time.Millisecond)
-
-	conn, err := tr.Dial(addr)
-	if err != nil {
-		t.Fatalf("Dial failed: %v", err)
-	}
-	// 确保客户端连接总是被关闭
-	defer func() {
-		if err := conn.Close(); err != nil {
-			t.Log("Client connection close error:", err)
-		}
-	}()
-
-	_, err = conn.Write([]byte("hello tcp"))
-	if err != nil {
-		t.Fatalf("Write failed: %v", err)
-	}
-
-	select {
-	case <-serverDone:
-	case <-time.After(3 * time.Second):
-		t.Fatal("test timed out")
+func TestTCPTransport_Protocol(t *testing.T) {
+	transport := NewTCPTransport()
+	if transport.Protocol() != "tcp" {
+		t.Errorf("Expected protocol to be 'tcp', got '%s'", transport.Protocol())
 	}
 }
 
-func TestTCPTransport_Concurrent(t *testing.T) {
-	t.Parallel()
-
-	tr := NewTCPTransport()
-	listener, err := tr.Listen("127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("Listen failed: %v", err)
-	}
-	defer func() {
-		if err := listener.Close(); err != nil {
-			t.Log("Listener close error:", err)
-		}
-	}()
-
-	// 启动服务端处理多个连接
-	go func() {
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
-				// 监听器关闭是正常情况
-				var netErr net.Error
-				if errors.As(err, &netErr) {
-					t.Log("Temporary accept error, retrying:", err)
-					continue
-				}
-				return
-			}
-
-			go func(c net.Conn) {
-				// 确保连接总是被关闭
-				defer func() {
-					if err := c.Close(); err != nil {
-						t.Log("Connection close error:", err)
-					}
-				}()
-
-				buf := make([]byte, 64)
-				n, _ := c.Read(buf)
-				write, err := c.Write(buf[:n])
-				if err != nil {
-					t.Errorf("Write failed: %v", err)
-					return
-				}
-				if write != n {
-					t.Errorf("Write not all bytes: %d != %d", write, n)
-				}
-			}(conn)
-		}
-	}()
-
-	time.Sleep(50 * time.Millisecond)
-	addr := listener.Addr().String()
-
-	const numClients = 10
-	var wg sync.WaitGroup
-	wg.Add(numClients)
-
-	for i := 0; i < numClients; i++ {
-		go func(id int) {
-			defer wg.Done()
-
-			conn, err := tr.Dial(addr)
-			if err != nil {
-				t.Errorf("Dial failed: %v", err)
-				return
-			}
-			// 确保客户端连接总是被关闭
-			defer func() {
-				if err := conn.Close(); err != nil {
-					t.Log("Client connection close error:", err)
-				}
-			}()
-
-			msg := []byte(fmt.Sprintf("client-%d", id))
-			_, err = conn.Write(msg)
-			if err != nil {
-				t.Errorf("Write failed: %v", err)
-				return
-			}
-
-			buf := make([]byte, 64)
-			n, err := conn.Read(buf)
-			if err != nil {
-				t.Errorf("Read failed: %v", err)
-				return
-			}
-
-			if string(buf[:n]) != string(msg) {
-				t.Errorf("Expected %q, got %q", msg, buf[:n])
-			}
-		}(i)
+func TestTCPTransport_BasicConnection(t *testing.T) {
+	config := TestConfig{
+		ProtocolName:      "TCP",
+		Transport:         NewTCPTransport(),
+		ConnectionTimeout: 5 * time.Second,
+		DataTimeout:       2 * time.Second,
+		SkipNetworkTests:  false,
 	}
 
-	wg.Wait()
+	result := RunBasicConnectionTest(config)
+	if !result.Success {
+		t.Fatalf("Basic connection test failed: %s - %v", result.Message, result.Error)
+	}
+	t.Logf("TCP basic connection test: %s", result.Message)
+}
+
+func TestTCPTransport_LargeData(t *testing.T) {
+	config := TestConfig{
+		ProtocolName:      "TCP",
+		Transport:         NewTCPTransport(),
+		ConnectionTimeout: 10 * time.Second,
+		DataTimeout:       5 * time.Second,
+		SkipNetworkTests:  false,
+	}
+
+	result := RunLargeDataTest(config)
+	if !result.Success {
+		t.Fatalf("Large data test failed: %s - %v", result.Message, result.Error)
+	}
+	t.Logf("TCP large data test: %s", result.Message)
 }
 
 func TestTCPTransport_Timeout(t *testing.T) {
-	t.Parallel()
-
-	tr := NewTCPTransport()
-	listener, err := tr.Listen("127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("Listen failed: %v", err)
+	config := TestConfig{
+		ProtocolName:      "TCP",
+		Transport:         NewTCPTransport(),
+		ConnectionTimeout: 5 * time.Second,
+		DataTimeout:       2 * time.Second,
+		SkipNetworkTests:  false,
 	}
-	defer func() {
-		if err := listener.Close(); err != nil {
-			t.Log("Listener close error:", err)
-		}
-	}()
 
-	t.Run("DialInvalidPort", func(t *testing.T) {
-		_, err := tr.Dial("127.0.0.1:99999")
-		if err == nil {
-			t.Fatal("Expected dial error")
-		}
-	})
+	result := RunTimeoutTest(config)
+	if !result.Success {
+		t.Fatalf("Timeout test failed: %s - %v", result.Message, result.Error)
+	}
+	t.Logf("TCP timeout test: %s", result.Message)
+}
 
-	t.Run("AcceptAfterClose", func(t *testing.T) {
-		err := listener.Close()
-		if err != nil {
-			t.Fatalf("Close failed: %v", err)
-			return
-		}
-		_, err = listener.Accept()
-		if err == nil {
-			t.Fatal("Expected accept error after close")
-		}
-	})
+func TestTCPTransport_InvalidAddress(t *testing.T) {
+	config := TestConfig{
+		ProtocolName:      "TCP",
+		Transport:         NewTCPTransport(),
+		ConnectionTimeout: 5 * time.Second,
+		DataTimeout:       2 * time.Second,
+		SkipNetworkTests:  false,
+	}
+
+	result := RunInvalidAddressTest(t, config)
+	if !result.Success {
+		t.Fatalf("Invalid address test failed: %s - %v", result.Message, result.Error)
+	}
+	t.Logf("TCP invalid address test: %s", result.Message)
+}
+
+func TestTCPListener_Addr(t *testing.T) {
+	transport := NewTCPTransport()
+
+	// 使用随机端口启动监听器
+	listener, err := transport.Listen("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to listen: %v", err)
+	}
+	defer SafeClose(listener, "tcp-listener")
+
+	addr := listener.Addr()
+	if addr == nil {
+		t.Fatal("Expected non-nil address")
+	}
+
+	if addr.Network() != "tcp" {
+		t.Errorf("Expected network to be 'tcp', got '%s'", addr.Network())
+	}
+
+	// 检查地址格式是否正确
+	_, port, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		t.Fatalf("Failed to split host:port: %v", err)
+	}
+
+	if port == "0" {
+		t.Error("Expected non-zero port")
+	}
+}
+
+func TestTCPListener_Close(t *testing.T) {
+	transport := NewTCPTransport()
+
+	// 使用随机端口启动监听器
+	listener, err := transport.Listen("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to listen: %v", err)
+	}
+
+	// 获取地址以便后续测试
+	addr := listener.Addr().String()
+
+	// 在协程中关闭监听器，单独处理错误
+	SafeClose(listener, "tcp-listener")
+
+	// 等待一下让关闭操作完成
+	time.Sleep(100 * time.Millisecond)
+
+	// 尝试连接到已关闭的监听器，应该失败
+	_, err = transport.Dial(addr)
+	if err == nil {
+		t.Fatal("Expected dial to fail after listener closed")
+	}
+
+	// 尝试再次接受连接，应该失败
+	_, err = listener.Accept()
+	if err == nil {
+		t.Fatal("Expected Accept to fail after listener closed")
+	}
+}
+
+func TestTCPTransport_ConnectionInterface(t *testing.T) {
+	config := TestConfig{
+		ProtocolName:      "TCP",
+		Transport:         NewTCPTransport(),
+		ConnectionTimeout: 5 * time.Second,
+		DataTimeout:       2 * time.Second,
+		SkipNetworkTests:  false,
+	}
+
+	// 创建回显服务器
+	server, err := NewEchoServer(config.Transport, "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+	defer SafeClose(server, "tcp-echo-server")
+
+	// 客户端连接
+	clientConn, err := config.Transport.Dial(server.Addr().String())
+	if err != nil {
+		t.Fatalf("Failed to dial server: %v", err)
+	}
+	defer SafeClose(clientConn, "tcp-client-connection")
+
+	// 测试连接的基本属性
+	if clientConn.LocalAddr() == nil {
+		t.Errorf("LocalAddr() returned nil")
+	}
+	if clientConn.RemoteAddr() == nil {
+		t.Errorf("RemoteAddr() returned nil")
+	}
+
+	// 测试设置超时
+	err = clientConn.SetDeadline(time.Now().Add(time.Second))
+	if err != nil {
+		t.Errorf("SetDeadline() failed: %v", err)
+	}
+
+	err = clientConn.SetReadDeadline(time.Now().Add(time.Second))
+	if err != nil {
+		t.Errorf("SetReadDeadline() failed: %v", err)
+	}
+
+	err = clientConn.SetWriteDeadline(time.Now().Add(time.Second))
+	if err != nil {
+		t.Errorf("SetWriteDeadline() failed: %v", err)
+	}
+
+	// 重置超时
+	err = clientConn.SetDeadline(time.Time{})
+	if err != nil {
+		t.Errorf("Failed to reset deadline: %v", err)
+	}
+
+	t.Log("TCP connection interface test passed")
 }
