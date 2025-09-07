@@ -9,7 +9,15 @@ type tcpListener struct {
 
 // Accept accepts a new connection and returns it as transport.Connection.
 func (l *tcpListener) Accept() (Connection, error) {
-	return l.Listener.Accept()
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
+func (l *tcpListener) Addr() net.Addr {
+	return l.Listener.Addr()
 }
 
 type tcpTransport struct{}

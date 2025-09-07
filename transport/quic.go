@@ -77,6 +77,10 @@ func (l *quicListener) Accept() (Connection, error) {
 	}, nil
 }
 
+func (l *quicListener) Addr() net.Addr {
+	return l.Listener.Addr()
+}
+
 type quicTransport struct{}
 
 func (t *quicTransport) Protocol() string {

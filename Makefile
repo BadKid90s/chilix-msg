@@ -26,22 +26,10 @@ BUILD_FLAGS=-v
 GREEN=\033[0;32m
 NC=\033[0m # 无颜色
 
-.PHONY: all build clean test coverage lint fmt vet tidy help tag release publish
+.PHONY: all clean test coverage lint fmt vet tidy help tag release publish
 
 # 默认目标
-all: lint test build
-
-# 构建应用程序
-build:
-	@echo "${GREEN}正在构建 $(BINARY_NAME)...${NC}"
-	$(GOBUILD) $(BUILD_FLAGS) -o $(BINARY_NAME) $(MAIN_PACKAGE)
-
-# 清理构建产物
-clean:
-	@echo "${GREEN}正在清理...${NC}"
-	@rm -f $(BINARY_NAME)
-	@rm -f $(COVERAGE_FILE)
-	@find . -type f -name "*.test" -delete
+all: lint test
 
 # 运行测试
 test:
@@ -126,9 +114,7 @@ publish:
 # 显示帮助信息
 help:
 	@echo "可用的目标:"
-	@echo "  all       - 运行代码检查、测试和构建"
-	@echo "  build     - 构建应用程序"
-	@echo "  clean     - 删除构建产物"
+	@echo "  all       - 运行代码检查、测试"
 	@echo "  test      - 运行测试"
 	@echo "  coverage  - 运行测试并生成覆盖率报告"
 	@echo "  lint      - 运行代码检查"

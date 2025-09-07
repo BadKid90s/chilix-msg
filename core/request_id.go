@@ -1,6 +1,8 @@
 package core
 
-import "sync/atomic"
+import (
+	"sync/atomic"
+)
 
 // RequestIDGenerator 请求ID生成器
 type RequestIDGenerator struct {

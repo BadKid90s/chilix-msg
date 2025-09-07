@@ -2,6 +2,7 @@ package transport
 
 import (
 	"crypto/sha1"
+	"net"
 
 	"github.com/xtaci/kcp-go/v5"
 	"golang.org/x/crypto/pbkdf2"
@@ -12,7 +13,15 @@ type kcpListener struct {
 }
 
 func (l *kcpListener) Accept() (Connection, error) {
-	return l.Listener.Accept()
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
+func (l *kcpListener) Addr() net.Addr {
+	return l.Listener.Addr()
 }
 
 type kcpTransport struct {
