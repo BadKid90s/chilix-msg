@@ -61,14 +61,13 @@ func newProcessor(conn transport.Connection, config ProcessorConfig) *processor 
 }
 
 // RegisterHandler 注册消息处理器
-func (p *processor) RegisterHandler(msgType string, handler Handler) error {
+func (p *processor) RegisterHandler(msgType string, handler Handler) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
 	// 注册类型到注册器
-	_, err := p.typeRegistry.Register(msgType)
-	if err != nil {
-		return err
+	if _, err := p.typeRegistry.Register(msgType); err != nil {
+		p.logger.Fatalf("Failed to register message type '%s': %v", msgType, err)
 	}
 
 	// 应用中间件
@@ -78,7 +77,6 @@ func (p *processor) RegisterHandler(msgType string, handler Handler) error {
 
 	// 注册处理器函数
 	p.handlers[msgType] = handler
-	return nil
 }
 
 // Use 注册中间件

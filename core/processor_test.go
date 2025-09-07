@@ -368,7 +368,10 @@ func testBasicMessageSendReceive(t *testing.T, tr transport.Transport) {
 		})
 	})
 	require.NoError(t, err, "Failed to start server")
-	defer server.Close()
+	defer func() {
+		err := server.Close()
+		require.NoError(t, err)
+	}()
 
 	t.Logf("Server started successfully, address: %s", server.Listener.Addr().String())
 
@@ -376,7 +379,10 @@ func testBasicMessageSendReceive(t *testing.T, tr transport.Transport) {
 	t.Log("Attempting to start client...")
 	client, err := helper.StartClient(tr, server.Listener.Addr().String())
 	require.NoError(t, err, "Failed to start client")
-	defer client.Close()
+	defer func() {
+		err := client.Close()
+		require.NoError(t, err)
+	}()
 
 	t.Log("Client started successfully")
 
@@ -415,12 +421,18 @@ func testRequestResponse(t *testing.T, tr transport.Transport) {
 		})
 	})
 	require.NoError(t, err)
-	defer server.Close()
+	defer func() {
+		err := server.Close()
+		require.NoError(t, err)
+	}()
 
 	// 创建客户端
 	client, err := helper.StartClient(tr, server.Listener.Addr().String())
 	require.NoError(t, err)
-	defer client.Close()
+	defer func() {
+		err := client.Close()
+		require.NoError(t, err)
+	}()
 
 	// 发送请求并等待响应
 	testMsg := "Hello Server!"
@@ -454,12 +466,18 @@ func testMiddleware(t *testing.T, tr transport.Transport) {
 		})
 	})
 	require.NoError(t, err)
-	defer server.Close()
+	defer func() {
+		err := server.Close()
+		require.NoError(t, err)
+	}()
 
 	// 创建客户端
 	client, err := helper.StartClient(tr, server.Listener.Addr().String())
 	require.NoError(t, err)
-	defer client.Close()
+	defer func() {
+		err := client.Close()
+		require.NoError(t, err)
+	}()
 
 	// 发送消息触发中间件
 	err = client.Processor.Send("test", "middleware test")
@@ -591,10 +609,19 @@ func testRequestTimeout(t *testing.T, tr transport.Transport) {
 		RequestTimeout:   500 * time.Millisecond, // 短超时时间
 		Logger:           log.NewDefaultLogger(),
 	})
-	defer clientProcessor.Close()
+
+	// 使用WaitGroup确保goroutine完成
+	var wg sync.WaitGroup
+	wg.Add(1)
 
 	go func() {
-		clientProcessor.Listen()
+		defer wg.Done()
+		err := clientProcessor.Listen()
+		// 不再检查错误，因为在测试结束时关闭连接会产生预期的错误
+		if err != nil {
+			// 只记录错误，不使用require.NoError因为这会在测试结束后运行
+			fmt.Printf("Client processor listen error: %v\n", err)
+		}
 	}()
 	time.Sleep(50 * time.Millisecond) // 减少等待时间
 
@@ -602,6 +629,11 @@ func testRequestTimeout(t *testing.T, tr transport.Transport) {
 	_, err = clientProcessor.Request("timeout_test", "this will timeout")
 	assert.Error(t, err)
 	assert.Equal(t, ErrRequestTimeout, err)
+
+	// 关闭处理器并等待goroutine完成
+	err = clientProcessor.Close()
+	assert.NoError(t, err)
+	wg.Wait()
 }
 
 // TestProcessorAdvancedFeatures 测试处理器高级功能

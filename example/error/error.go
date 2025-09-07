@@ -26,7 +26,12 @@ func startServer() {
 	if err != nil {
 		log.Fatalf("Server start failed: %v", err)
 	}
-	defer listener.Close()
+	defer func() {
+		err := listener.Close()
+		if err != nil {
+			log.Printf("Error closing listener: %v", err)
+		}
+	}()
 
 	fmt.Println("✅ 服务器启动在 :9999")
 
@@ -42,17 +47,28 @@ func startServer() {
 }
 
 func handleServerConnection(conn net.Conn) {
-	defer conn.Close()
+	defer func() {
+		err := conn.Close()
+		if err != nil {
+			log.Printf("Error closing connection: %v", err)
+		}
+	}()
 
 	processor := core.NewProcessor(conn, core.ProcessorConfig{
 		Serializer:       serializer.DefaultSerializer,
 		MessageSizeLimit: 1024 * 1024,
 		RequestTimeout:   10 * time.Second,
 	})
-	defer processor.Close()
+	defer func() {
+		err := processor.Close()
+		if err != nil {
+			log.Printf("Error closing processor: %v", err)
+		}
+	}()
 
 	// 注册正常处理器
 	processor.RegisterHandler("get_data", func(ctx core.Context) error {
+
 		var request map[string]interface{}
 		if err := ctx.Bind(&request); err != nil {
 			// 通信协议错误，返回错误响应
@@ -128,7 +144,9 @@ func startClient() {
 		fmt.Printf("❌ 通信错误: %v\n", err)
 	} else {
 		var result map[string]interface{}
-		resp.Bind(&result)
+		if err := resp.Bind(&result); err != nil {
+			fmt.Printf("Error binding response: %v\n", err)
+		}
 		if success, ok := result["success"].(bool); ok && success {
 			fmt.Printf("✅ 获取用户成功: %+v\n", result["data"])
 		} else {

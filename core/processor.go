@@ -17,7 +17,7 @@ type Handler func(ctx Context) error
 // Processor 消息处理器接口 - 用户面向的简洁接口
 type Processor interface {
 	// RegisterHandler 消息处理
-	RegisterHandler(msgType string, handler Handler) error
+	RegisterHandler(msgType string, handler Handler)
 	// Use 中间件
 	Use(middleware Middleware)
 

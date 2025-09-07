@@ -19,7 +19,12 @@ func TestKCPTransport_Basic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Listen failed: %v", err)
 	}
-	defer listener.Close()
+	defer func() {
+		err := listener.Close()
+		if err != nil {
+			t.Errorf("Error closing listener: %v", err)
+		}
+	}()
 
 	realAddr := listener.Addr().String()
 	fmt.Println("KCP real listen address:", realAddr)
@@ -35,7 +40,12 @@ func TestKCPTransport_Basic(t *testing.T) {
 			t.Errorf("Dial failed: %v", err)
 			return
 		}
-		defer conn.Close()
+		defer func() {
+			err := conn.Close()
+			if err != nil {
+				t.Errorf("Error closing connection: %v", err)
+			}
+		}()
 
 		msg := []byte("hello kcp")
 		// 发送消息
@@ -56,7 +66,12 @@ func TestKCPTransport_Basic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Accept failed: %v", err)
 	}
-	defer conn.Close()
+	defer func() {
+		err := conn.Close()
+		if err != nil {
+			t.Errorf("Error closing connection: %v", err)
+		}
+	}()
 
 	// 读取消息
 	buf := make([]byte, 64)

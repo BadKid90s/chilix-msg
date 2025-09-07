@@ -44,7 +44,12 @@ func startServer() {
 	if err != nil {
 		log.Fatalf("Server start failed: %v", err)
 	}
-	defer listener.Close()
+	defer func() {
+		err := listener.Close()
+		if err != nil {
+			log.Printf("Error closing listener: %v", err)
+		}
+	}()
 
 	log.Printf("✅ Server started on %s", listener.Addr())
 
@@ -53,7 +58,12 @@ func startServer() {
 	if err != nil {
 		log.Fatalf("Accept connection failed: %v", err)
 	}
-	defer conn.Close()
+	defer func() {
+		err := conn.Close()
+		if err != nil {
+			log.Printf("Error closing connection: %v", err)
+		}
+	}()
 
 	log.Printf("Client connected: %s", conn.RemoteAddr())
 
@@ -66,6 +76,9 @@ func startServer() {
 
 	// 注册消息处理器
 	processor.RegisterHandler("get_time", func(ctx core.Context) error {
+		if err != nil {
+			log.Printf("Error registering handler: %v", err)
+		}
 		currentTime := time.Now().Format(time.RFC3339)
 		log.Printf("Received time request, sending response")
 		return ctx.Reply(currentTime)
@@ -112,6 +125,9 @@ func startClient() {
 
 	// 注册消息处理器
 	processor.RegisterHandler("time_response", func(ctx core.Context) error {
+		if err != nil {
+			log.Printf("Error registering handler: %v", err)
+		}
 		var timeStr string
 		if err := ctx.Bind(&timeStr); err != nil {
 			log.Printf("Failed to parse time response: %v", err)
