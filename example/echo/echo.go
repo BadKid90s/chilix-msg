@@ -47,7 +47,11 @@ func startServer() {
 	if err != nil {
 		logger.Errorf("Echo server start failed: %v", err)
 	}
-	defer listener.Close()
+	defer func() {
+		if err := listener.Close(); err != nil {
+			logger.Errorf("Error closing listener: %v", err)
+		}
+	}()
 
 	logger.Infof("✅ Echo server started on %s", listener.Addr())
 
@@ -67,13 +71,22 @@ func startClient() {
 	if err != nil {
 		logger.Fatalf("Connect failed: %v", err)
 	}
-	defer conn.Close()
+	defer func(conn net.Conn) {
+		if err := conn.Close(); err != nil {
+			logger.Errorf("Error closing connection: %v", err)
+		}
+	}(conn)
 
 	handleEchoClientConnection(conn)
 }
 
 func handleEchoServerConnection(conn transport.Connection) {
-	defer conn.Close()
+	defer func(conn net.Conn) {
+		if err := conn.Close(); err != nil {
+			logger.Errorf("Error closing connection: %v", err)
+		}
+	}(conn)
+
 	// 创建处理器
 	processor := core.NewProcessor(conn, core.ProcessorConfig{
 		Serializer:       serializer.DefaultSerializer,

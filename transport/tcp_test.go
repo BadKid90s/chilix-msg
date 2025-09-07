@@ -111,7 +111,7 @@ func TestTCPTransport_Concurrent(t *testing.T) {
 			if err != nil {
 				// 监听器关闭是正常情况
 				var netErr net.Error
-				if errors.As(err, &netErr) && netErr.Temporary() {
+				if errors.As(err, &netErr) {
 					t.Log("Temporary accept error, retrying:", err)
 					continue
 				}

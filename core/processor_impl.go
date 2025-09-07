@@ -3,6 +3,9 @@ package core
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -257,14 +260,27 @@ func (p *processor) Close() error {
 }
 
 // isRecoverableError 判断错误是否可恢复
+
 func (p *processor) isRecoverableError(err error) bool {
-	// 这里可以根据具体的错误类型来判断
-	// 例如：网络临时错误、序列化错误等可以恢复
-	// 连接关闭、严重协议错误等不可恢复
-	switch err.Error() {
-	case "EOF", "connection reset by peer":
-		return false // 连接已关闭，不可恢复
-	default:
-		return true // 其他错误暂时视为可恢复
+	// 如果是关闭性错误，返回false
+	if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
+		return false
 	}
+
+	// 检查是否为连接重置错误
+	if strings.Contains(err.Error(), "connection reset by peer") {
+		return false
+	}
+
+	// 检查是否为WebSocket连接关闭错误
+	if strings.Contains(err.Error(), "websocket: close") {
+		return false
+	}
+
+	// 检查是否为管道关闭错误
+	if strings.Contains(err.Error(), "read/write on closed pipe") {
+		return false
+	}
+
+	return true // 其他错误暂时视为可恢复
 }

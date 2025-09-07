@@ -206,7 +206,7 @@ func (h *TestHelper) StartClientWithConfig(tr transport.Transport, addr string, 
 		if connectErr != nil {
 			return nil, fmt.Errorf("failed to dial: %w", connectErr)
 		}
-	case <-time.After(30 * time.Second): // 增加超时时间到30秒
+	case <-time.After(10 * time.Second): // 增加超时时间到10秒
 		h.logger.Errorf("Client connect timeout after 30 seconds")
 		return nil, fmt.Errorf("client connect timeout")
 	}
@@ -228,48 +228,6 @@ func (h *TestHelper) StartClientWithConfig(tr transport.Transport, addr string, 
 	}()
 
 	return client, nil
-}
-
-// TimeoutError represents a timeout error
-type TimeoutError struct {
-	Operation string
-}
-
-func (e *TimeoutError) Error() string {
-	return fmt.Sprintf("timeout waiting for %s", e.Operation)
-}
-
-// TestError represents a general test error
-type TestError struct {
-	Message string
-	Cause   error
-}
-
-func (e *TestError) Error() string {
-	if e.Cause != nil {
-		return fmt.Sprintf("%s: %v", e.Message, e.Cause)
-	}
-	return e.Message
-}
-
-// Unwrap returns the underlying cause of the error
-func (e *TestError) Unwrap() error {
-	return e.Cause
-}
-
-// WithTimeout runs a function with a timeout
-func WithTimeout(fn func() error, timeout time.Duration) error {
-	done := make(chan error, 1)
-	go func() {
-		done <- fn()
-	}()
-
-	select {
-	case err := <-done:
-		return err
-	case <-time.After(timeout):
-		return &TimeoutError{Operation: "operation"}
-	}
 }
 
 // WaitForServerReady waits for the server to be ready
@@ -368,10 +326,7 @@ func testBasicMessageSendReceive(t *testing.T, tr transport.Transport) {
 		})
 	})
 	require.NoError(t, err, "Failed to start server")
-	defer func() {
-		err := server.Close()
-		require.NoError(t, err)
-	}()
+	defer closeServer(t, server)
 
 	t.Logf("Server started successfully, address: %s", server.Listener.Addr().String())
 
@@ -379,10 +334,7 @@ func testBasicMessageSendReceive(t *testing.T, tr transport.Transport) {
 	t.Log("Attempting to start client...")
 	client, err := helper.StartClient(tr, server.Listener.Addr().String())
 	require.NoError(t, err, "Failed to start client")
-	defer func() {
-		err := client.Close()
-		require.NoError(t, err)
-	}()
+	defer closeServer(t, server)
 
 	t.Log("Client started successfully")
 
@@ -421,18 +373,12 @@ func testRequestResponse(t *testing.T, tr transport.Transport) {
 		})
 	})
 	require.NoError(t, err)
-	defer func() {
-		err := server.Close()
-		require.NoError(t, err)
-	}()
+	defer closeServer(t, server)
 
 	// 创建客户端
 	client, err := helper.StartClient(tr, server.Listener.Addr().String())
 	require.NoError(t, err)
-	defer func() {
-		err := client.Close()
-		require.NoError(t, err)
-	}()
+	defer closeClient(t, client)
 
 	// 发送请求并等待响应
 	testMsg := "Hello Server!"
@@ -466,19 +412,12 @@ func testMiddleware(t *testing.T, tr transport.Transport) {
 		})
 	})
 	require.NoError(t, err)
-	defer func() {
-		err := server.Close()
-		require.NoError(t, err)
-	}()
+	defer closeServer(t, server)
 
 	// 创建客户端
 	client, err := helper.StartClient(tr, server.Listener.Addr().String())
 	require.NoError(t, err)
-	defer func() {
-		err := client.Close()
-		require.NoError(t, err)
-	}()
-
+	defer closeClient(t, client)
 	// 发送消息触发中间件
 	err = client.Processor.Send("test", "middleware test")
 	require.NoError(t, err)
@@ -509,12 +448,12 @@ func testConcurrentProcessing(t *testing.T, tr transport.Transport) {
 		})
 	})
 	require.NoError(t, err)
-	defer server.Close()
+	defer closeServer(t, server)
 
 	// 创建客户端
 	client, err := helper.StartClient(tr, server.Listener.Addr().String())
 	require.NoError(t, err)
-	defer client.Close()
+	defer closeClient(t, client)
 
 	// 并发发送多个消息
 	const numMessages = 10
@@ -561,12 +500,12 @@ func testErrorHandling(t *testing.T, tr transport.Transport) {
 		})
 	})
 	require.NoError(t, err)
-	defer server.Close()
+	defer closeServer(t, server)
 
 	// 创建客户端
 	client, err := helper.StartClient(tr, server.Listener.Addr().String())
 	require.NoError(t, err)
-	defer client.Close()
+	defer closeClient(t, client)
 
 	// 发送请求触发错误
 	resp, err := client.Processor.Request("error_test", "trigger error")
@@ -596,17 +535,19 @@ func testRequestTimeout(t *testing.T, tr transport.Transport) {
 		})
 	})
 	require.NoError(t, err)
-	defer server.Close()
+	defer closeServer(t, server)
 
 	// 创建客户端，使用短超时时间
 	conn, err := tr.Dial(server.Listener.Addr().String())
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
 	clientProcessor := NewProcessor(conn, ProcessorConfig{
 		Serializer:       serializer.DefaultSerializer,
 		MessageSizeLimit: 1024 * 1024,
-		RequestTimeout:   500 * time.Millisecond, // 短超时时间
+		RequestTimeout:   100 * time.Millisecond, // 短超时时间
 		Logger:           log.NewDefaultLogger(),
 	})
 
@@ -620,7 +561,7 @@ func testRequestTimeout(t *testing.T, tr transport.Transport) {
 		// 不再检查错误，因为在测试结束时关闭连接会产生预期的错误
 		if err != nil {
 			// 只记录错误，不使用require.NoError因为这会在测试结束后运行
-			fmt.Printf("Client processor listen error: %v\n", err)
+			t.Logf("Client processor listen error: %v", err)
 		}
 	}()
 	time.Sleep(50 * time.Millisecond) // 减少等待时间
@@ -638,36 +579,36 @@ func testRequestTimeout(t *testing.T, tr transport.Transport) {
 
 // TestProcessorAdvancedFeatures 测试处理器高级功能
 func TestProcessorAdvancedFeatures(t *testing.T) {
-	transport := transport.NewTCPTransport()
+	tr := transport.NewTCPTransport()
 
 	// 测试消息大小限制
 	t.Run("MessageSizeLimit", func(t *testing.T) {
-		testMessageSizeLimit(t, transport)
+		testMessageSizeLimit(t, tr)
 	})
 
 	// 测试序列化器配置
 	t.Run("CustomSerializer", func(t *testing.T) {
-		testCustomSerializer(t, transport)
+		testCustomSerializer(t, tr)
 	})
 
 	// 测试处理器生命周期
 	t.Run("ProcessorLifecycle", func(t *testing.T) {
-		testProcessorLifecycle(t, transport)
+		testProcessorLifecycle(t, tr)
 	})
 
 	// 测试空消息处理
 	t.Run("EmptyMessage", func(t *testing.T) {
-		testEmptyMessage(t, transport)
+		testEmptyMessage(t, tr)
 	})
 
 	// 测试大消息处理
 	t.Run("LargeMessage", func(t *testing.T) {
-		testLargeMessage(t, transport)
+		testLargeMessage(t, tr)
 	})
 
 	// 测试未注册的消息类型
 	t.Run("UnregisteredMessageType", func(t *testing.T) {
-		testUnregisteredMessageType(t, transport)
+		testUnregisteredMessageType(t, tr)
 	})
 }
 
@@ -689,12 +630,12 @@ func testMessageSizeLimit(t *testing.T, tr transport.Transport) {
 		Logger:           helper.logger,
 	})
 	require.NoError(t, err)
-	defer server.Close()
+	defer closeServer(t, server)
 
 	// 创建客户端
 	client, err := helper.StartClient(tr, server.Listener.Addr().String())
 	require.NoError(t, err)
-	defer client.Close()
+	defer closeClient(t, client)
 
 	// 发送超大消息（会被服务端忽略）
 	longMessage := strings.Repeat("a", 1000)
@@ -734,7 +675,7 @@ func testCustomSerializer(t *testing.T, tr transport.Transport) {
 		Logger:           helper.logger,
 	})
 	require.NoError(t, err)
-	defer server.Close()
+	defer closeServer(t, server)
 
 	// 创建客户端
 	client, err := helper.StartClientWithConfig(tr, server.Listener.Addr().String(), ProcessorConfig{
@@ -744,7 +685,7 @@ func testCustomSerializer(t *testing.T, tr transport.Transport) {
 		Logger:           helper.logger,
 	})
 	require.NoError(t, err)
-	defer client.Close()
+	defer closeClient(t, client)
 
 	// 发送JSON数据
 	testData := map[string]interface{}{
@@ -775,12 +716,12 @@ func testProcessorLifecycle(t *testing.T, tr transport.Transport) {
 		assert.NotNil(t, p.Serializer())
 	})
 	require.NoError(t, err)
-	defer server.Close()
+	defer closeServer(t, server)
 
 	// 创建客户端
 	client, err := helper.StartClient(tr, server.Listener.Addr().String())
 	require.NoError(t, err)
-	defer client.Close()
+	defer closeClient(t, client)
 
 	// 等待服务器处理器初始化
 	time.Sleep(100 * time.Millisecond)
@@ -813,12 +754,12 @@ func testEmptyMessage(t *testing.T, tr transport.Transport) {
 		})
 	})
 	require.NoError(t, err)
-	defer server.Close()
+	defer closeServer(t, server)
 
 	// 创建客户端
 	client, err := helper.StartClient(tr, server.Listener.Addr().String())
 	require.NoError(t, err)
-	defer client.Close()
+	defer closeClient(t, client)
 
 	// 发送空消息
 	err = client.Processor.Send("empty_test", "")
@@ -851,12 +792,12 @@ func testLargeMessage(t *testing.T, tr transport.Transport) {
 		})
 	})
 	require.NoError(t, err)
-	defer server.Close()
+	defer closeServer(t, server)
 
 	// 创建客户端
 	client, err := helper.StartClient(tr, server.Listener.Addr().String())
 	require.NoError(t, err)
-	defer client.Close()
+	defer closeClient(t, client)
 
 	// 发送大消息 (10KB)
 	largeMessage := strings.Repeat("a", 10*1024)
@@ -879,13 +820,12 @@ func testUnregisteredMessageType(t *testing.T, tr transport.Transport) {
 	// 创建服务端（不注册任何处理器）
 	server, err := helper.StartServer(tr, nil)
 	require.NoError(t, err)
-	defer server.Close()
+	defer closeServer(t, server)
 
 	// 创建客户端
 	client, err := helper.StartClient(tr, server.Listener.Addr().String())
 	require.NoError(t, err)
-	defer client.Close()
-
+	defer closeClient(t, client)
 	// 发送未注册的消息类型
 	err = client.Processor.Send("unregistered_type", "test message")
 	require.NoError(t, err)
@@ -893,4 +833,14 @@ func testUnregisteredMessageType(t *testing.T, tr transport.Transport) {
 	// 服务器应该不会崩溃，消息会被忽略
 	// 这里我们只是验证发送不报错，实际行为取决于实现
 	time.Sleep(50 * time.Millisecond) // 减少等待时间
+}
+
+func closeServer(t *testing.T, ser *TestServer) {
+	err := ser.Close()
+	require.NoError(t, err)
+}
+
+func closeClient(t *testing.T, cli *TestClient) {
+	err := cli.Close()
+	require.NoError(t, err)
 }

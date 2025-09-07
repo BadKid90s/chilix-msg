@@ -205,19 +205,23 @@ type BufferPool struct {
 func NewBufferPool(size int) *BufferPool {
 	return &BufferPool{
 		pool: sync.Pool{
-			New: func() interface{} { return make([]byte, size) },
+			New: func() interface{} {
+				buf := make([]byte, size)
+				return &buf
+			},
 		},
 		size: size,
 	}
 }
 
 func (p *BufferPool) Get() []byte {
-	return p.pool.Get().([]byte)
+	buf := p.pool.Get().(*[]byte)
+	return *buf
 }
 
 func (p *BufferPool) Put(buf []byte) {
 	if len(buf) == p.size {
-		p.pool.Put(buf)
+		p.pool.Put(&buf)
 	}
 }
 
