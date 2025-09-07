@@ -44,7 +44,7 @@ func startServer() {
 func handleServerConnection(conn net.Conn) {
 	defer conn.Close()
 
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := core.NewProcessor(conn, core.ProcessorConfig{
 		Serializer:       serializer.DefaultSerializer,
 		MessageSizeLimit: 1024 * 1024,
 		RequestTimeout:   10 * time.Second,
@@ -104,7 +104,7 @@ func startClient() {
 	}
 	defer conn.Close()
 
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := core.NewProcessor(conn, core.ProcessorConfig{
 		Serializer:       serializer.DefaultSerializer,
 		MessageSizeLimit: 1024 * 1024,
 		RequestTimeout:   5 * time.Second,

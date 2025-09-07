@@ -15,7 +15,7 @@ import (
 // TestProtocolOverhead_V0_0_2 测试v0.0.2协议的开销
 func TestProtocolOverhead_V0_0_2(t *testing.T) {
 	s := serializer.DefaultSerializer
-	c := codec.NewLengthPrefixCodec(s)
+	c := codec.NewBalancedCodec(s)
 
 	tests := []struct {
 		name             string
@@ -42,13 +42,13 @@ func TestProtocolOverhead_V0_0_2(t *testing.T) {
 			expectedOverhead: 15 + len("very_long_message_type_name_for_testing_protocol_overhead"),
 		},
 		{
-			name:             "Complex_Payload",
-			msgType:          "complex",
+			name:    "Complex_Payload",
+			msgType: "complex",
 			payload: map[string]interface{}{
-				"id":    12345,
-				"name":  "测试用户",
-				"data":  []int{1, 2, 3, 4, 5},
-				"meta":  map[string]string{"version": "v0.0.2"},
+				"id":   12345,
+				"name": "测试用户",
+				"data": []int{1, 2, 3, 4, 5},
+				"meta": map[string]string{"version": "v0.0.2"},
 			},
 			expectedOverhead: 15 + len("complex"),
 		},
@@ -70,7 +70,7 @@ func TestProtocolOverhead_V0_0_2(t *testing.T) {
 			overheadRatio := float64(headerOverhead) / float64(totalSize) * 100
 
 			// 验证头部开销
-			assert.Equal(t, tt.expectedOverhead, headerOverhead, 
+			assert.Equal(t, tt.expectedOverhead, headerOverhead,
 				"头部开销不匹配: 消息类型=%s", tt.msgType)
 
 			// 记录详细信息
@@ -88,7 +88,7 @@ func TestProtocolOverhead_V0_0_2(t *testing.T) {
 // TestProtocolOverhead_Comparison 对比不同消息大小的协议开销
 func TestProtocolOverhead_Comparison(t *testing.T) {
 	s := serializer.DefaultSerializer
-	c := codec.NewLengthPrefixCodec(s)
+	c := codec.NewBalancedCodec(s)
 
 	// 定义不同大小的测试数据
 	testCases := []struct {
@@ -107,9 +107,9 @@ func TestProtocolOverhead_Comparison(t *testing.T) {
 	expectedHeaderSize := 15 + len(msgType)
 
 	t.Logf("协议开销对比分析 (v0.0.2):")
-	t.Logf("固定头部开销: %d字节 (15字节基础 + %d字节消息类型)", 
+	t.Logf("固定头部开销: %d字节 (15字节基础 + %d字节消息类型)",
 		expectedHeaderSize, len(msgType))
-	t.Logf("%-12s | %-8s | %-8s | %-8s | %-10s", 
+	t.Logf("%-12s | %-8s | %-8s | %-8s | %-10s",
 		"消息大小", "总大小", "负载", "头部", "开销比例")
 	t.Logf("%s", "-------------|----------|----------|----------|----------")
 
@@ -143,7 +143,7 @@ func TestProtocolOverhead_Comparison(t *testing.T) {
 			"头部开销应该固定为 %d字节", expectedHeaderSize)
 
 		// 输出对比数据
-		t.Logf("%-12s | %-8d | %-8d | %-8d | %-9.1f%%", 
+		t.Logf("%-12s | %-8d | %-8d | %-8d | %-9.1f%%",
 			tc.description, totalSize, actualPayloadSize, headerOverhead, overheadRatio)
 	}
 }
@@ -151,7 +151,7 @@ func TestProtocolOverhead_Comparison(t *testing.T) {
 // TestProtocolOverhead_MessageTypeLength 测试不同消息类型长度的开销
 func TestProtocolOverhead_MessageTypeLength(t *testing.T) {
 	s := serializer.DefaultSerializer
-	c := codec.NewLengthPrefixCodec(s)
+	c := codec.NewBalancedCodec(s)
 
 	// 测试不同长度的消息类型
 	messageTypes := []struct {
@@ -169,7 +169,7 @@ func TestProtocolOverhead_MessageTypeLength(t *testing.T) {
 	expectedBaseOverhead := 15 // 固定头部大小
 
 	t.Logf("消息类型长度对协议开销的影响:")
-	t.Logf("%-8s | %-8s | %-8s | %-12s", 
+	t.Logf("%-8s | %-8s | %-8s | %-12s",
 		"类型长度", "总开销", "基础开销", "类型开销")
 	t.Logf("%s", "---------|----------|----------|------------")
 
@@ -194,14 +194,14 @@ func TestProtocolOverhead_MessageTypeLength(t *testing.T) {
 		assert.Equal(t, len(mt.msgType), typeOverhead,
 			"消息类型开销应该等于消息类型字节长度")
 
-		t.Logf("%-8d | %-8d | %-8d | %-12d", 
+		t.Logf("%-8d | %-8d | %-8d | %-12d",
 			len(mt.msgType), totalOverhead, expectedBaseOverhead, typeOverhead)
 	}
 }
 
 // TestProtocolOverhead_FlagImpact 测试标志位对开销的影响
 func TestProtocolOverhead_FlagImpact(t *testing.T) {
-	c := codec.NewLengthPrefixCodec(serializer.DefaultSerializer)
+	c := codec.NewBalancedCodec(serializer.DefaultSerializer)
 
 	msgType := "flag_test"
 	payload := "test data"
@@ -212,10 +212,10 @@ func TestProtocolOverhead_FlagImpact(t *testing.T) {
 		name  string
 		flags uint8
 	}{
-		{"No_Flags", codec.FlagNone},
-		{"Compressed", codec.FlagCompressed},
-		{"Encrypted", codec.FlagEncrypted},
-		{"Both", codec.FlagCompressed | codec.FlagEncrypted},
+		{"No_Flags", codec.BalancedFlagNone},
+		{"Compressed", codec.BalancedFlagCompressed},
+		{"Encrypted", codec.BalancedFlagEncrypted},
+		{"Both", codec.BalancedFlagCompressed | codec.BalancedFlagEncrypted},
 	}
 
 	t.Logf("标志位对协议开销的影响:")
@@ -235,28 +235,32 @@ func TestProtocolOverhead_FlagImpact(t *testing.T) {
 		assert.Equal(t, expectedOverhead, overhead,
 			"标志位不应影响协议开销")
 
-		t.Logf("  %s (0x%02x): 总大小=%d字节, 开销=%d字节", 
+		t.Logf("  %s (0x%02x): 总大小=%d字节, 开销=%d字节",
 			ft.name, ft.flags, totalSize, overhead)
 	}
 }
 
 // 辅助函数：编码消息
-func encodeMessage(c *codec.LengthPrefixCodec, msgType string, payload interface{}, requestID uint64) ([]byte, error) {
+func encodeMessage(c *codec.BalancedCodec, msgType string, payload interface{}, requestID uint64) ([]byte, error) {
 	buf := &bytes.Buffer{}
-	err := c.Encode(buf, msgType, payload, requestID)
+	// 将字符串转换为哈希ID
+	typeID := hashString(msgType)
+	err := c.Encode(buf, typeID, payload, requestID)
 	return buf.Bytes(), err
 }
 
 // 辅助函数：编码带标志位的消息
-func encodeMessageWithFlags(c *codec.LengthPrefixCodec, msgType string, payload interface{}, requestID uint64, flags uint8) ([]byte, error) {
+func encodeMessageWithFlags(c *codec.BalancedCodec, msgType string, payload interface{}, requestID uint64, flags uint8) ([]byte, error) {
 	buf := &bytes.Buffer{}
-	err := c.EncodeWithFlags(buf, msgType, payload, requestID, flags)
+	// 将字符串转换为哈希ID
+	typeID := hashString(msgType)
+	err := c.EncodeWithFlags(buf, typeID, payload, requestID, flags, nil)
 	return buf.Bytes(), err
 }
 
 // TestProtocolVersion_Validation 测试协议版本验证
 func TestProtocolVersion_Validation(t *testing.T) {
-	c := codec.NewLengthPrefixCodec(serializer.DefaultSerializer)
+	c := codec.NewBalancedCodec(serializer.DefaultSerializer)
 
 	// 编码一个正常消息
 	encoded, err := encodeMessage(c, "version_test", "data", 12345)
@@ -265,8 +269,8 @@ func TestProtocolVersion_Validation(t *testing.T) {
 
 	// 验证版本字段
 	version := encoded[0]
-	assert.Equal(t, uint8(codec.ProtocolVersion), version,
-		"协议版本应该为 %d", codec.ProtocolVersion)
+	assert.Equal(t, uint8(codec.BalancedVersion), version,
+		"协议版本应该为 %d", codec.BalancedVersion)
 
 	t.Logf("协议版本验证:")
 	t.Logf("  当前版本: v0.0.2")

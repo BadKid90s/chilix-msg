@@ -75,7 +75,7 @@ func startClient() {
 func handleEchoServerConnection(conn transport.Connection) {
 	defer conn.Close()
 	// 创建处理器
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := core.NewProcessor(conn, core.ProcessorConfig{
 		Serializer:       serializer.DefaultSerializer,
 		MessageSizeLimit: 1024 * 1024,
 		RequestTimeout:   10 * time.Second,
@@ -102,7 +102,7 @@ func handleEchoServerConnection(conn transport.Connection) {
 
 func handleEchoClientConnection(conn transport.Connection) {
 	// 创建处理器
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := core.NewProcessor(conn, core.ProcessorConfig{
 		Serializer:       serializer.DefaultSerializer,
 		MessageSizeLimit: 1024 * 1024,
 		RequestTimeout:   10 * time.Second,

@@ -58,7 +58,7 @@ func startServer() {
 	log.Printf("Client connected: %s", conn.RemoteAddr())
 
 	// 创建处理器
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := core.NewProcessor(conn, core.ProcessorConfig{
 		Serializer:       serializer.DefaultSerializer,
 		MessageSizeLimit: 1024 * 1024,
 		RequestTimeout:   3 * time.Second,
@@ -104,7 +104,7 @@ func startClient() {
 	log.Printf("✅ Connected to server")
 
 	// 创建处理器
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := core.NewProcessor(conn, core.ProcessorConfig{
 		Serializer:       serializer.DefaultSerializer,
 		MessageSizeLimit: 1024 * 1024,
 		RequestTimeout:   10 * time.Second,
