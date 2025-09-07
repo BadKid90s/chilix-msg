@@ -165,7 +165,7 @@ func main() {
 func handleRequestResponse(conn net.Conn) {
     defer conn.Close()
     
-    processor := core.NewProcessor(conn, core.ProcessorOptions{
+    processor := core.NewProcessor(conn, core.ProcessorConfig{
         Serializer:       serializer.DefaultSerializer,
         MessageSizeLimit: 1024 * 1024,
         RequestTimeout:   10 * time.Second,
@@ -228,7 +228,7 @@ func main() {
     }
     defer conn.Close()
     
-    processor := core.NewProcessor(conn, core.ProcessorOptions{
+    processor := core.NewProcessor(conn, core.ProcessorConfig{
         Serializer:     serializer.DefaultSerializer,
         RequestTimeout: 5 * time.Second,
     })
@@ -280,17 +280,17 @@ import (
 )
 
 type NotificationServer struct {
-    clients map[string]*core.Processor
+    clients map[string]core.Processor
     mutex   sync.RWMutex
 }
 
 func NewNotificationServer() *NotificationServer {
     return &NotificationServer{
-        clients: make(map[string]*core.Processor),
+        clients: make(map[string]core.Processor),
     }
 }
 
-func (ns *NotificationServer) AddClient(clientID string, processor *core.Processor) {
+func (ns *NotificationServer) AddClient(clientID string, processor core.Processor) {
     ns.mutex.Lock()
     ns.clients[clientID] = processor
     ns.mutex.Unlock()
@@ -354,7 +354,7 @@ func main() {
             defer c.Close()
             clientIDStr := fmt.Sprintf("client_%d", id)
             
-            processor := core.NewProcessor(c, core.ProcessorOptions{
+            processor := core.NewProcessor(c, core.ProcessorConfig{
                 Serializer: serializer.DefaultSerializer,
             })
             defer processor.Close()
@@ -406,7 +406,7 @@ func main() {
     }
     defer conn.Close()
     
-    processor := core.NewProcessor(conn, core.ProcessorOptions{
+    processor := core.NewProcessor(conn, core.ProcessorConfig{
         Serializer: serializer.DefaultSerializer,
     })
     defer processor.Close()
@@ -482,7 +482,7 @@ func main() {
     }
     defer conn.Close()
     
-    processor := core.NewProcessor(conn, core.ProcessorOptions{
+    processor := core.NewProcessor(conn, core.ProcessorConfig{
         Serializer:     serializer.DefaultSerializer,
         RequestTimeout: 5 * time.Second,
     })
@@ -563,7 +563,7 @@ func handleConnection(conn net.Conn) {
     defer conn.Close()
     
     // 创建处理器
-    processor := core.NewProcessor(conn, core.ProcessorOptions{
+    processor := core.NewProcessor(conn, core.ProcessorConfig{
         Serializer:       serializer.DefaultSerializer,
         MessageSizeLimit: 1024 * 1024,
         RequestTimeout:   10 * time.Second,
@@ -604,7 +604,7 @@ func main() {
     defer conn.Close()
     
     // 创建处理器
-    processor := core.NewProcessor(conn, core.ProcessorOptions{
+    processor := core.NewProcessor(conn, core.ProcessorConfig{
         Serializer:       serializer.DefaultSerializer,
         MessageSizeLimit: 1024 * 1024,
         RequestTimeout:   10 * time.Second,
@@ -628,35 +628,50 @@ func main() {
 
 ## 📚 协议格式
 
-chilix-msg 使用基于长度前缀的优化二进制协议格式，确保消息的可靠传输和解析，并支持高性能的8字节对齐访问。
+chilix-msg 使用高性能的 Balanced 二进制协议格式，支持加密、压缩和扩展字段，确保消息的可靠传输和高效解析。
 
 ### 消息结构
 
 ```
-+-------+-------+-------------+------------------+----------------+------------------+----------------+
-| 版本   | 标志  | 总长度(4字节) | 请求ID(8字节)     | 类型长度(1字节)  | 消息类型(N字节)    | 负载数据(M字节)  | 
-+-------+-------+-------------+------------------+----------------+------------------+----------------+
+0             1                2                3               4
+0 1 2 3 4 5 6 7  0 1 2 3 4 5 6 7  0 1 2 3 4 5 6 7 0 1 2 3 4 5 6 7
++---------------+---------------+---------------+---------------+
+|                     Magic Number (32bit, 0x4348504D)          |  // "CHPM"
++---------------+---------------+---------------+---------------+
+| Version(4bit) | Flags(4bit)   |        Total Length (24bit)   |  // 版本+标志+总长度
++---------------+---------------+---------------+---------------+
+|                        Request ID (64bit)                     |  // 请求ID
++---------------+---------------+---------------+---------------+
+| Type ID (32bit)                                               |  // 消息类型ID
++---------------+---------------+---------------+---------------+
+| Extension TLV (变长, 可选，如果FlagExtended设置)                 |  // 扩展区
+|  - Type(8bit) + Length(16bit) + Value(变长)                    |
+|  - 可多个TLV，Length=0表示结束                                   |
++---------------+---------------+---------------+---------------+
+|                     Payload (变长)                             |  // 消息负载
++---------------+---------------+---------------+---------------+
 ```
 
 ### 字段说明
 
 | 字段 | 长度 | 编码 | 说明 |
 |------|------|------|------|
-| 版本 | 1字节 | uint8 | 协议版本号，当前版本为1 |
-| 标志 | 1字节 | uint8 | 特性标志位，支持压缩、加密等扩展功能 |
-| 总长度 | 4字节 | big-endian | 整个消息的字节长度，包括头部和负载数据 |
-| 请求ID | 8字节 | big-endian | 用于标识请求-响应关系的唯一ID，固定位置保证8字节对齐 |
-| 类型长度 | 1字节 | uint8 | 消息类型的字节长度，最大255字节 |
-| 消息类型 | N字节 | UTF-8 | 表示消息类型的UTF-8字符串 |
-| 负载数据 | M字节 | 序列化 | 经过序列化的消息内容 |
+| Magic Number | 4字节 | uint32 | 魔数标识，固定为 0x4348504D ("CHPM") |
+| Version | 4位 | uint4 | 协议版本号，当前版本为 0 |
+| Flags | 4位 | uint4 | 特性标志位，支持压缩、加密、扩展等 |
+| Total Length | 24位 | uint24 | 整个消息的字节长度，包括头部和负载数据 |
+| Request ID | 8字节 | uint64 | 用于标识请求-响应关系的唯一ID |
+| Type ID | 4字节 | uint32 | 消息类型ID，替代字符串提升性能 |
+| Extension TLV | 变长 | TLV格式 | 扩展字段，支持多个TLV结构 |
+| Payload | 变长 | 序列化 | 经过序列化的消息内容 |
 
 ### 协议特点
 
+- **魔数验证**: 使用固定魔数 "CHPM" 进行协议识别
 - **版本控制**: 支持协议版本管理，便于未来升级
-- **扩展标志**: 预留标志位支持压缩、加密等特性
-- **8字节对齐**: 请求ID字段固定位置，优化内存访问性能
-- **大端序**: 使用大端序(big-endian)进行数字编码，保证跨平台兼容
-- **UTF-8 支持**: 消息类型必须是有效的UTF-8字符串，便于调试
+- **高效标志**: 4位标志位支持压缩、加密、扩展等特性
+- **类型优化**: 32位类型ID替代字符串，提升匹配性能
+- **扩展机制**: TLV格式的灵活扩展字段支持
 - **请求匹配**: 请求ID用于匹配请求和响应，为0时表示推送消息
 - **灵活序列化**: 负载数据使用配置的序列化器进行序列化/反序列化
 
@@ -664,10 +679,10 @@ chilix-msg 使用基于长度前缀的优化二进制协议格式，确保消息
 
 | 标志位 | 值 | 说明 |
 |-------|----|----- |
-| FlagNone | 0x00 | 无特殊标志 |
-| FlagCompressed | 0x01 | 数据压缩标志 |
-| FlagEncrypted | 0x02 | 数据加密标志 |
-| 其他 | 0x04-0x80 | 预留扩展标志 |
+| BalancedFlagNone | 0x0 | 无特殊标志 |
+| BalancedFlagCompressed | 0x1 | 数据压缩标志 |
+| BalancedFlagEncrypted | 0x2 | 数据加密标志 |
+| BalancedFlagExtended | 0x8 | 有扩展区标志 |
 
 ---
 ## 🔌 支持的协议
@@ -716,7 +731,7 @@ func (t *CustomTransport) Dial(address string) (transport.Connection, error) {
 
 #### 创建示例：
 ```go
-processor := core.NewProcessor(conn, core.ProcessorOptions{
+processor := core.NewProcessor(conn, core.ProcessorConfig{
     Serializer:       serializer.DefaultSerializer,
     MessageSizeLimit: 1024 * 1024,
     RequestTimeout:   10 * time.Second,
@@ -884,7 +899,7 @@ chilix-msg 默认使用 JSON 序列化，但您可以轻松替换为其他序列
 
 ### 默认序列化器
 ```go
-processor := core.NewProcessor(conn, core.ProcessorOptions{
+processor := core.NewProcessor(conn, core.ProcessorConfig{
     Serializer: serializer.DefaultSerializer, // JSON 序列化
 })
 ```
@@ -892,9 +907,9 @@ processor := core.NewProcessor(conn, core.ProcessorOptions{
 ### 自定义序列化器
 ```go
 // 使用 Binary 序列化
-processor := core.ProcessorOptions{
+processor := core.NewProcessor(conn, core.ProcessorConfig{
     Serializer: &serializer.Binary{},
-}
+})
 
 // 或者实现自定义序列化器
 type CustomSerializer struct{}
@@ -915,7 +930,7 @@ func (s *CustomSerializer) Deserialize(data []byte, target interface{}) error {
 ### 配置优化
 
 ```go
-processor := core.NewProcessor(conn, core.ProcessorOptions{
+processor := core.NewProcessor(conn, core.ProcessorConfig{
     Serializer:       serializer.DefaultSerializer,
     MessageSizeLimit: 10 * 1024 * 1024,    // 10MB 消息大小限制
     RequestTimeout:   30 * time.Second,     // 30秒请求超时
@@ -983,7 +998,7 @@ func main() {
         go func(c net.Conn) {
             defer c.Close()
             
-            processor := core.NewProcessor(c, core.ProcessorOptions{
+            processor := core.NewProcessor(c, core.ProcessorConfig{
                 Serializer: serializer.DefaultSerializer,
             })
             defer processor.Close()
@@ -1032,7 +1047,7 @@ func main() {
     }
     defer conn.Close()
     
-    processor := core.NewProcessor(conn, core.ProcessorOptions{
+    processor := core.NewProcessor(conn, core.ProcessorConfig{
         Serializer:     serializer.DefaultSerializer,
         RequestTimeout: 5 * time.Second,
     })
@@ -1111,7 +1126,7 @@ func main() {
         go func(c net.Conn) {
             defer c.Close()
             
-            processor := core.NewProcessor(c, core.ProcessorOptions{
+            processor := core.NewProcessor(c, core.ProcessorConfig{
                 Serializer: serializer.DefaultSerializer,
             })
             defer processor.Close()
@@ -1205,10 +1220,10 @@ importedPublicKey, err := middleware.LoadRSAPublicKey(publicKeyPEM)
 #### 创建和配置
 ```go
 // 创建新的处理器
-func NewProcessor(conn transport.Connection, opts ProcessorOptions) *Processor
+func NewProcessor(conn transport.Connection, config ProcessorConfig) Processor
 
-// 处理器选项
-type ProcessorOptions struct {
+// 处理器配置
+type ProcessorConfig struct {
     Serializer       serializer.Serializer // 序列化器
     MessageSizeLimit int                    // 消息大小限制
     RequestTimeout   time.Duration          // 请求超时时间
@@ -1219,10 +1234,10 @@ type ProcessorOptions struct {
 #### 中间件和处理器
 ```go
 // 注册中间件
-func (p *Processor) Use(middleware Middleware)
+func (p Processor) Use(middleware Middleware)
 
 // 注册消息处理器
-func (p *Processor) RegisterHandler(msgType string, handler Handler)
+func (p Processor) RegisterHandler(msgType string, handler Handler)
 
 // 处理器函数签名
 type Handler func(ctx Context) error
@@ -1234,19 +1249,19 @@ type Middleware func(next Handler) Handler
 #### 消息通信
 ```go
 // 开始监听和处理消息
-func (p *Processor) Listen() error
+func (p Processor) Listen() error
 
 // 发送消息（推送模式）
-func (p *Processor) Send(msgType string, payload interface{}) error
+func (p Processor) Send(msgType string, payload interface{}) error
 
 // 发送请求并等待响应（请求-响应模式）
-func (p *Processor) Request(msgType string, payload interface{}) (Response, error)
+func (p Processor) Request(msgType string, payload interface{}) (Response, error)
 
 // 发送响应
-func (p *Processor) Reply(requestID uint64, msgType string, payload interface{}) error
+func (p Processor) Reply(requestID uint64, msgType string, payload interface{}) error
 
 // 关闭处理器
-func (p *Processor) Close() error
+func (p Processor) Close() error
 ```
 
 ### 📋 core.Context
@@ -1269,7 +1284,7 @@ type Context interface {
     Connection() transport.Connection // 获取底层连接
     Writer() Writer                   // 获取消息写入器
     Logger() log.Logger               // 获取日志记录器
-    Processor() *Processor            // 获取处理器
+    Processor() Processor             // 获取处理器
     
     // 响应方法
     Reply(payload interface{}) error  // 发送成功响应
@@ -1411,7 +1426,7 @@ func TestMessageHandler(t *testing.T) {
     defer client.Close()
     
     // 创建处理器
-    processor := core.NewProcessor(server, core.ProcessorOptions{
+    processor := core.NewProcessor(server, core.ProcessorConfig{
         Serializer: serializer.DefaultSerializer,
     })
     defer processor.Close()
@@ -1425,7 +1440,7 @@ func TestMessageHandler(t *testing.T) {
     go processor.Listen()
     
     // 测试消息发送
-    clientProcessor := core.NewProcessor(client, core.ProcessorOptions{
+    clientProcessor := core.NewProcessor(client, core.ProcessorConfig{
         Serializer: serializer.DefaultSerializer,
     })
     defer clientProcessor.Close()
