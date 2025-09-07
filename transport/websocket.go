@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BadKid90s/chilix-msg/log"
 	"github.com/gorilla/websocket"
 )
 
@@ -114,6 +115,7 @@ func (l *wsListener) Close() error {
 			go func() {
 				if err := l.server.Close(); err != nil {
 					// 记录错误但不阻塞
+					log.Errorf("Error closing server: %v", err)
 				}
 			}()
 		} else if l.ln != nil {
@@ -121,6 +123,7 @@ func (l *wsListener) Close() error {
 			go func() {
 				if err := l.ln.Close(); err != nil {
 					// 记录错误但不阻塞
+					log.Errorf("Error closing listener: %v", err)
 				}
 			}()
 		}

@@ -4,17 +4,18 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/BadKid90s/chilix-msg/log"
 )
 
 // SafeClose 在协程中安全关闭连接，单独处理错误
 func SafeClose(closer io.Closer, name string) {
 	if err := closer.Close(); err != nil {
-		log.Printf("Error closing %s: %v", name, err)
+		log.Errorf("Error closing %s: %v", name, err)
 	}
 }
 
@@ -65,6 +66,7 @@ func (s *EchoServer) acceptLoop() {
 		if err != nil {
 			if !s.closed {
 				// 只有在服务器未关闭时才记录错误
+				log.Errorf("Error accepting connection: %v", err)
 			}
 			return
 		}
@@ -82,7 +84,7 @@ func (s *EchoServer) handleConnection(conn Connection) {
 	defer func(conn Connection) {
 		err := conn.Close()
 		if err != nil {
-			log.Printf("Error closing connection: %v", err)
+			log.Errorf("Error closing connection: %v", err)
 		}
 	}(conn)
 
@@ -92,6 +94,7 @@ func (s *EchoServer) handleConnection(conn Connection) {
 		if err != nil {
 			if err != io.EOF {
 				// 记录非EOF错误
+				_ = err // 避免未使用变量警告
 			}
 			return
 		}
@@ -150,6 +153,7 @@ func RunBasicConnectionTest(config TestConfig) TestResult {
 	if dataTimeout == 0 {
 		dataTimeout = 2 * time.Second
 	}
+	_ = dataTimeout // 避免未使用变量警告
 
 	// 客户端连接
 	clientConn, err := config.Transport.Dial(server.Addr().String())

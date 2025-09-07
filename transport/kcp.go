@@ -13,7 +13,7 @@ type kcpListener struct {
 }
 
 func (l *kcpListener) Accept() (Connection, error) {
-	conn, err := l.Listener.AcceptKCP()
+	conn, err := l.AcceptKCP()
 	if err != nil {
 		return nil, err
 	}
