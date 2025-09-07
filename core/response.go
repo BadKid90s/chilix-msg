@@ -15,7 +15,7 @@ type response struct {
 	msgType   string
 	requestID uint64
 	rawData   []byte
-	processor *Processor
+	processor Processor
 }
 
 func (r *response) MsgType() string {
@@ -27,7 +27,7 @@ func (r *response) RequestID() uint64 {
 }
 
 func (r *response) Bind(target interface{}) error {
-	return r.processor.opts.Serializer.Deserialize(r.rawData, target)
+	return r.processor.Serializer().Deserialize(r.rawData, target)
 }
 
 func (r *response) RawData() []byte {

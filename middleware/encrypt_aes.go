@@ -54,7 +54,7 @@ type encryptedWriter struct {
 	writer    core.Writer
 	key       []byte
 	logger    log.Logger
-	processor *core.Processor
+	processor core.Processor
 }
 
 func (w *encryptedWriter) Write(msgType string, payload interface{}) error {

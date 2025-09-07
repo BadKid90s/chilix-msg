@@ -34,7 +34,7 @@ func TestRSAEncryptionMiddleware(t *testing.T) {
 
 	// 创建模拟processor
 	conn := NewMockConnection()
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := core.NewProcessor(conn, core.ProcessorConfig{
 		Logger: logger,
 	})
 
@@ -143,7 +143,7 @@ func TestRSAEncryptedWriter(t *testing.T) {
 	mockWriter := &MockWriter{}
 	logger := log.NewDefaultLogger()
 	conn := NewMockConnection()
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := core.NewProcessor(conn, core.ProcessorConfig{
 		Logger: logger,
 	})
 
@@ -185,7 +185,7 @@ func TestRSAEncryptedWriterReply(t *testing.T) {
 	mockWriter := &MockWriter{}
 	logger := log.NewDefaultLogger()
 	conn := NewMockConnection()
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := core.NewProcessor(conn, core.ProcessorConfig{
 		Logger: logger,
 	})
 
@@ -228,7 +228,7 @@ func TestRSAEncryptedWriterError(t *testing.T) {
 	mockWriter := &MockWriter{}
 	logger := log.NewDefaultLogger()
 	conn := NewMockConnection()
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := core.NewProcessor(conn, core.ProcessorConfig{
 		Logger: logger,
 	})
 

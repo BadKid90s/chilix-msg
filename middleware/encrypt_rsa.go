@@ -47,7 +47,7 @@ type rsaEncryptedWriter struct {
 	writer    core.Writer
 	publicKey *rsa.PublicKey
 	logger    log.Logger
-	processor *core.Processor
+	processor core.Processor
 }
 
 func (w *rsaEncryptedWriter) Write(msgType string, payload interface{}) error {

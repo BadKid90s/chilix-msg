@@ -109,7 +109,7 @@ func TestKeyGeneration(t *testing.T) {
 	key1 := KeyFromString("password123")
 	assert.Equal(t, 32, len(key1)) // SHA-256 produces 32-byte hash
 
-	// 测试相同的输入产生相同的输出
+	// 测试相同地输入产生相同的输出
 	key2 := KeyFromString("password123")
 	assert.Equal(t, key1, key2)
 
@@ -144,7 +144,7 @@ func TestEncryptionMiddleware(t *testing.T) {
 
 	// 创建模拟processor
 	conn := NewMockConnection()
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := core.NewProcessor(conn, core.ProcessorConfig{
 		Logger: logger,
 	})
 
@@ -186,7 +186,7 @@ func TestEncryptedWriter_Write(t *testing.T) {
 	mockWriter := &MockWriter{}
 	logger := log.NewDefaultLogger()
 	conn := NewMockConnection()
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := core.NewProcessor(conn, core.ProcessorConfig{
 		Logger: logger,
 	})
 
@@ -227,7 +227,7 @@ func TestEncryptedWriter_Reply(t *testing.T) {
 	mockWriter := &MockWriter{}
 	logger := log.NewDefaultLogger()
 	conn := NewMockConnection()
-	processor := core.NewProcessor(conn, core.ProcessorOptions{
+	processor := core.NewProcessor(conn, core.ProcessorConfig{
 		Logger: logger,
 	})
 
@@ -255,7 +255,7 @@ type MockContext struct {
 	rawData   []byte
 	writer    core.Writer
 	logger    log.Logger
-	processor *core.Processor
+	processor core.Processor
 }
 
 func (c *MockContext) Bind(target interface{}) error {
@@ -298,7 +298,7 @@ func (c *MockContext) SetWriter(writer core.Writer) {
 	c.writer = writer
 }
 
-func (c *MockContext) Processor() *core.Processor {
+func (c *MockContext) Processor() core.Processor {
 	return c.processor
 }
 

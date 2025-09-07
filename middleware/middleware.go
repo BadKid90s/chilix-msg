@@ -19,18 +19,3 @@ func LoggingMiddleware() core.Middleware {
 		}
 	}
 }
-
-// RecoveryMiddleware 恢复中间件
-func RecoveryMiddleware() core.Middleware {
-	return func(next core.Handler) core.Handler {
-		return func(ctx core.Context) (err error) {
-			defer func() {
-				if r := recover(); r != nil {
-					err = core.ErrHandlerPanic
-					ctx.Logger().Errorf("Recovered from panic in handler for %s: %v", ctx.MessageType(), r)
-				}
-			}()
-			return next(ctx)
-		}
-	}
-}

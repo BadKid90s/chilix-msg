@@ -11,10 +11,10 @@ type Writer interface {
 
 // messageWriter 消息写入器实现
 type messageWriter struct {
-	processor *Processor
+	processor Processor
 }
 
-func NewMessageWriter(p *Processor) Writer {
+func NewMessageWriter(p Processor) Writer {
 	return &messageWriter{processor: p}
 }
 
