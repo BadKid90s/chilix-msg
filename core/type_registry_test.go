@@ -1,15 +1,14 @@
-package core_test
+package core
 
 import (
 	"testing"
 
-	"github.com/BadKid90s/chilix-msg/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestTypeRegistry(t *testing.T) {
-	registry := core.NewTypeRegistry()
+	registry := NewRegistry()
 
 	// 测试类型注册
 	msgType := "new_message_type"
@@ -34,7 +33,7 @@ func TestTypeRegistry(t *testing.T) {
 }
 
 func TestTypeRegistryConflict(t *testing.T) {
-	registry := core.NewTypeRegistry()
+	registry := NewRegistry()
 
 	// 注册第一个类型
 	msgType1 := "test_type"
@@ -50,7 +49,7 @@ func TestTypeRegistryConflict(t *testing.T) {
 }
 
 func TestTypeRegistryGetAllTypes(t *testing.T) {
-	registry := core.NewTypeRegistry()
+	registry := NewRegistry()
 
 	// 注册多个类型
 	types := []string{"type1", "type2", "type3"}
@@ -74,7 +73,7 @@ func TestTypeRegistryGetAllTypes(t *testing.T) {
 }
 
 func TestTypeRegistryClear(t *testing.T) {
-	registry := core.NewTypeRegistry()
+	registry := NewRegistry()
 
 	// 注册一些类型
 	msgType := "test_type"
@@ -99,7 +98,7 @@ func TestTypeRegistryClear(t *testing.T) {
 }
 
 func TestTypeRegistryConcurrent(t *testing.T) {
-	registry := core.NewTypeRegistry()
+	registry := NewRegistry()
 
 	// 并发注册多个类型
 	types := []string{"type1", "type2", "type3", "type4", "type5"}
